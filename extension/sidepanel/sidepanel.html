@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <!-- Settings (collapsible) -->
+  <details class="section settings" id="settingsSection">
+    <summary>设置</summary>
+    <div class="settings-body">
+      <label>Backend URL</label>
+      <input id="baseUrl" type="text" placeholder="http://127.0.0.1:31871">
+      <label>Token</label>
+      <input id="token" type="password" placeholder="client_token">
+      <div class="toggle-row">
+        <span>自动轮询</span>
+        <label class="switch">
+          <input type="checkbox" id="autoPoll" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="toggle-row">
+        <span>自动执行</span>
+        <label class="switch">
+          <input type="checkbox" id="autoExecute">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <button id="saveConfig">保存</button>
+    </div>
+  </details>
+
+  <!-- Instructions -->
+  <div class="section">
+    <div class="section-header">
+      <h2>待执行指令</h2>
+      <button id="refreshBtn" class="icon-btn" title="刷新">↻</button>
+    </div>
+    <div id="list"></div>
+  </div>
+
+  <!-- Execution Log -->
+  <details class="section log-section" open>
+    <summary>执行日志 <span id="logCount" class="badge">0</span></summary>
+    <div id="logList" class="log-list"></div>
+    <button id="clearLog" class="text-btn">清空日志</button>
+  </details>
+
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

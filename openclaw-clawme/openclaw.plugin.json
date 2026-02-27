@@ -1,0 +1,25 @@
+{
+  "id": "clawme",
+  "name": "ClawMe",
+  "description": "Send structured instructions to ClawMe (remind, open_url, etc.) for execution on the user's browser or phone.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "description": "ClawMe backend base URL"
+      },
+      "clientToken": {
+        "type": "string",
+        "description": "ClawMe client token for this user"
+      }
+    }
+  },
+  "uiHints": {
+    "baseUrl": { "label": "ClawMe Backend URL", "placeholder": "http://127.0.0.1:31871" },
+    "clientToken": { "label": "Client Token", "sensitive": true }
+  },
+  "skills": ["skills/clawme"]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@clawme/openclaw-clawme",
+  "version": "0.1.0",
+  "description": "OpenClaw plugin: clawme_send tool to send instructions to ClawMe",
+  "type": "module",
+  "main": "index.js",
+  "openclaw": {
+    "extensions": ["./index.js"]
+  }
+}

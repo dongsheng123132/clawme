@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "ClawMe",
+  "version": "0.2.0",
+  "description": "OpenClaw's hand in your browser: tweet, compose email, fill forms, click, extract — you click Execute.",
+  "permissions": ["storage", "scripting", "sidePanel", "alarms", "notifications", "tabs"],
+  "host_permissions": ["http://127.0.0.1:*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/16.png",
+      "48": "icons/48.png"
+    }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png"
+  }
+}
