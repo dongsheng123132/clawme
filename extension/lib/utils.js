@@ -35,10 +35,29 @@ export function waitForTabLoad(tabId, timeoutMs = 10000) {
 }
 
 /**
+ * Ensure we have host permission for a URL.
+ * Uses optional_host_permissions — Chrome will prompt the user if needed.
+ */
+export async function ensureHostPermission(url) {
+  try {
+    const origin = new URL(url).origin + "/*";
+    const has = await chrome.permissions.contains({ origins: [origin] });
+    if (!has) {
+      const granted = await chrome.permissions.request({ origins: [origin] });
+      if (!granted) throw new Error("用户拒绝了对 " + new URL(url).hostname + " 的访问权限");
+    }
+  } catch (e) {
+    // If permission request fails (e.g. from service worker), proceed anyway
+    // activeTab may still cover the current tab
+  }
+}
+
+/**
  * Navigate to url in a tab and wait for it to load.
  * Returns the tabId.
  */
 export async function navigateAndWait(url) {
+  await ensureHostPermission(url);
   const tab = await chrome.tabs.create({ url });
   await waitForTabLoad(tab.id);
   return tab.id;
