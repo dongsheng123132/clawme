@@ -247,6 +247,8 @@ h2 { font-size: 14px; font-weight: 600; }
 .wf-step.running .step-num { background: var(--accent); color: #fff; }
 .wf-step.ok .step-num { background: var(--success); color: #fff; }
 .wf-step.failed .step-num { background: var(--danger); color: #fff; }
+.wf-step.skipped .step-num { background: var(--muted); color: #fff; }
+.wf-step.skipped { opacity: 0.5; }
 
 .wf-progress {
   width: 100%;
@@ -328,6 +330,8 @@ h2 { font-size: 14px; font-weight: 600; }
 .log-status-ok { color: var(--success); }
 .log-status-failed { color: var(--danger); }
 .log-status-cancelled { color: var(--muted); }
+.log-status-skipped { color: var(--muted); }
+.log-status-running { color: var(--accent); }
 .log-result { color: var(--text-secondary); word-break: break-all; }
 
 .badge {
@@ -342,6 +346,44 @@ h2 { font-size: 14px; font-weight: 600; }
   color: #fff;
   border-radius: 8px;
   padding: 0 4px;
+}
+
+/* Checkbox for selective execution */
+.inst-check {
+  width: 16px; height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.instruction { display: flex; gap: 8px; align-items: flex-start; }
+.instruction .inst-body { flex: 1; min-width: 0; }
+
+/* Batch execute bar */
+.batch-bar {
+  display: flex; gap: 6px; align-items: center;
+  margin-bottom: 6px; padding: 4px 0;
+}
+.batch-bar .btn { font-size: 11px; padding: 3px 10px; }
+.batch-bar .batch-count { font-size: 11px; color: var(--text-secondary); }
+
+/* Re-execute button in log */
+.log-entry { position: relative; }
+.log-replay {
+  background: none; border: 1px solid var(--border); border-radius: 3px;
+  font-size: 10px; color: var(--accent); cursor: pointer;
+  padding: 0 4px; margin-left: auto; white-space: nowrap; flex-shrink: 0;
+}
+.log-replay:hover { background: var(--bg-secondary); }
+
+/* Workflow step checkbox */
+.wf-step { position: relative; }
+.wf-step-check {
+  width: 14px; height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .empty { color: var(--text-secondary); text-align: center; padding: 20px 0; }

@@ -30,9 +30,10 @@ export function groupByWorkflow(instructions) {
  * Emits progress via onStep callback.
  */
 export class WorkflowRunner {
-  constructor(instructions, { onStep } = {}) {
+  constructor(instructions, { onStep, skipSteps } = {}) {
     this.instructions = instructions;
     this.onStep = onStep || (() => {});
+    this.skipSteps = skipSteps || new Set(); // step indices to skip
     this.aborted = false;
     this.results = [];
   }
@@ -47,6 +48,13 @@ export class WorkflowRunner {
         this.onStep(i, "aborted", "用户中止");
         this.results.push({ status: "cancelled", result: "用户中止" });
         break;
+      }
+
+      // Skip unchecked steps
+      if (this.skipSteps.has(i)) {
+        this.onStep(i, "skipped", "用户跳过");
+        this.results.push({ status: "cancelled", result: "用户跳过" });
+        continue;
       }
 
       const inst = this.instructions[i];
