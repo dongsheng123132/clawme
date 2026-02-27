@@ -1,6 +1,6 @@
 import { DEFAULT_BASE, TYPE_LABELS, LOG_MAX_ENTRIES } from "../lib/constants.js";
 import { fetchPending, reportResult } from "../lib/api.js";
-import { renderPayload, executeInstruction } from "../lib/executor.js";
+import { renderPayload, executeInstruction, replayInstruction } from "../lib/executor.js";
 import { groupByWorkflow, WorkflowRunner } from "../lib/workflow.js";
 
 // --- DOM refs ---
@@ -311,9 +311,10 @@ async function replayFromLog(logIdx) {
   const type = inst.instruction.type;
   addLogEntry(type, "running", "重新执行中...", inst);
 
-  const outcome = await executeInstruction(inst);
+  // Execute only, don't report to backend (old instruction ID is stale)
+  const outcome = await replayInstruction(inst);
   executionLog[0].status = outcome.status;
-  executionLog[0].result = outcome.result;
+  executionLog[0].result = "[重放] " + outcome.result;
   renderLog();
 }
 

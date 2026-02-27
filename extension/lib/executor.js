@@ -49,3 +49,21 @@ export async function executeInstruction(inst) {
   await reportResult(inst.id, outcome.status, outcome.result);
   return outcome;
 }
+
+/**
+ * Replay an instruction (execute only, no backend report).
+ * Used for re-executing from log history.
+ */
+export async function replayInstruction(inst) {
+  const { type, payload } = inst.instruction;
+  const handler = handlers[type];
+
+  if (!handler) {
+    return { status: "failed", result: "不支持的指令类型: " + type };
+  }
+  try {
+    return await handler.execute(payload || {});
+  } catch (e) {
+    return { status: "failed", result: String(e.message || e) };
+  }
+}
