@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ClawMe — AI Agent 的管家</title>
+  <meta name="description" content="连接你的 AI Agent 与设备，接收指令，替你执行。开源、安全、跨平台。">
+  <meta name="theme-color" content="#FF6B35">
+  <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    :root { --orange: #FF6B35; --dark: #1a1a1a; --gray: #666; --light: #f8f8f8; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; color: var(--dark); line-height: 1.6; }
+
+    /* Hero */
+    .hero {
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center; padding: 40px 20px;
+      background: linear-gradient(135deg, #FF6B35 0%, #E84525 100%); color: #fff;
+    }
+    .hero-logo { width: 120px; height: 120px; margin-bottom: 24px; }
+    .hero h1 { font-size: 48px; font-weight: 800; letter-spacing: -2px; margin-bottom: 8px; }
+    .hero .tagline { font-size: 20px; opacity: 0.9; margin-bottom: 32px; font-weight: 300; }
+    .hero .subtitle { font-size: 15px; opacity: 0.7; max-width: 400px; margin-bottom: 40px; }
+    .cta-group { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+    .btn { padding: 14px 32px; border-radius: 12px; font-size: 16px; font-weight: 600;
+           text-decoration: none; display: inline-block; transition: transform 0.2s; }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-white { background: #fff; color: var(--orange); }
+    .btn-outline { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,0.5); }
+
+    /* Features */
+    .features { padding: 80px 20px; max-width: 900px; margin: 0 auto; }
+    .features h2 { text-align: center; font-size: 32px; margin-bottom: 48px; }
+    .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; }
+    .feature-card {
+      padding: 24px; border-radius: 16px; background: var(--light);
+      border: 1px solid #eee;
+    }
+    .feature-card .icon { font-size: 36px; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 18px; margin-bottom: 8px; }
+    .feature-card p { color: var(--gray); font-size: 14px; }
+
+    /* How it works */
+    .how { padding: 80px 20px; background: var(--light); }
+    .how-inner { max-width: 700px; margin: 0 auto; }
+    .how h2 { text-align: center; font-size: 32px; margin-bottom: 48px; }
+    .step { display: flex; gap: 16px; margin-bottom: 32px; align-items: flex-start; }
+    .step-num {
+      width: 40px; height: 40px; border-radius: 50%; background: var(--orange);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 18px; flex-shrink: 0;
+    }
+    .step-text h3 { font-size: 16px; margin-bottom: 4px; }
+    .step-text p { color: var(--gray); font-size: 14px; }
+
+    /* Footer */
+    .footer {
+      text-align: center; padding: 40px 20px; color: var(--gray); font-size: 13px;
+      border-top: 1px solid #eee;
+    }
+    .footer a { color: var(--orange); text-decoration: none; }
+
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 36px; }
+      .hero .tagline { font-size: 17px; }
+      .features h2, .how h2 { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Hero -->
+  <section class="hero">
+    <img src="/icons/icon-192.svg" alt="ClawMe" class="hero-logo">
+    <h1>ClawMe</h1>
+    <p class="tagline">AI Agent 的管家 — 替你动手，不替你做主</p>
+    <p class="subtitle">
+      连接你的 AI Agent（OpenClaw 等）与浏览器、手机，
+      接收结构化指令，一键执行或自动完成。
+    </p>
+    <div class="cta-group">
+      <a href="/app.html" class="btn btn-white">打开 App</a>
+      <a href="https://github.com/dongsheng123132/clawme" class="btn btn-outline">GitHub</a>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features">
+    <h2>为什么用 ClawMe</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="icon">&#x1F916;</div>
+        <h3>Agent 指令直达设备</h3>
+        <p>不再复制粘贴 — Agent 发指令，你的设备直接执行：发推、写邮件、填表单、点击、抓取。</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">&#x1F4F1;</div>
+        <h3>跨平台</h3>
+        <p>浏览器插件 + 手机 PWA，一个 Token 连接所有设备。扫码即连，无需复杂配置。</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">&#x1F512;</div>
+        <h3>你说了算</h3>
+        <p>半自动执行：每条指令你确认后再执行，也可开启自动模式。Token 授权，只认你的 Agent。</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">&#x1F310;</div>
+        <h3>开源 AGPL</h3>
+        <p>代码完全开源，社区共建。自部署或用托管服务，你的数据你做主。</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">&#x26A1;</div>
+        <h3>多步骤 Workflow</h3>
+        <p>一组指令按顺序自动执行，支持进度可视化和中止。适合复杂自动化场景。</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">&#x1F517;</div>
+        <h3>任意 Agent 接入</h3>
+        <p>不绑定特定 Agent — OpenClaw、自研 Agent 或任何支持 HTTP 的 AI 都可接入。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="how">
+    <div class="how-inner">
+      <h2>三步连通</h2>
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <h3>安装客户端</h3>
+          <p>Chrome 安装浏览器插件，或手机打开本页添加到主屏幕（PWA）。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <h3>扫码连接</h3>
+          <p>用手机扫描连接二维码，自动配置 Backend 地址和 Token，一秒连通。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <h3>Agent 发指令，你执行</h3>
+          <p>OpenClaw 等 Agent 发送指令 → 你的设备收到通知 → 点击执行或自动完成。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>ClawMe / 虾me — 开源 AI Agent 执行层</p>
+    <p style="margin-top:8px">
+      <a href="https://github.com/dongsheng123132/clawme">GitHub</a> ·
+      <a href="/app.html">App</a> ·
+      AGPL-3.0
+    </p>
+  </footer>
+</body>
+</html>

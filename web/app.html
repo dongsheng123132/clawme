@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>ClawMe</title>
+  <meta name="theme-color" content="#FF6B35">
+  <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Connect screen (shown when not connected) -->
+    <div id="connectScreen" class="screen">
+      <div class="connect-hero">
+        <img src="/icons/icon-192.svg" alt="ClawMe" class="app-logo">
+        <h1>ClawMe</h1>
+        <p>连接你的 Agent</p>
+      </div>
+      <div class="connect-form">
+        <label>Backend URL</label>
+        <input id="inputUrl" type="url" placeholder="https://clawme.net" autocomplete="url">
+        <label>Token</label>
+        <input id="inputToken" type="password" placeholder="你的 Token">
+        <button id="btnConnect" class="btn-primary">连接</button>
+        <div class="divider"><span>或</span></div>
+        <button id="btnScan" class="btn-secondary">扫码连接</button>
+      </div>
+      <div id="connectError" class="error-msg"></div>
+    </div>
+
+    <!-- Scan screen -->
+    <div id="scanScreen" class="screen hidden">
+      <div class="scan-header">
+        <button id="btnBackFromScan" class="back-btn">&larr;</button>
+        <h2>扫描二维码</h2>
+      </div>
+      <div id="scanArea" class="scan-area">
+        <video id="scanVideo" playsinline></video>
+        <div class="scan-overlay"></div>
+      </div>
+      <p class="scan-hint">将二维码放入框内自动识别</p>
+    </div>
+
+    <!-- Main screen (shown when connected) -->
+    <div id="mainScreen" class="screen hidden">
+      <!-- Header -->
+      <header class="app-header">
+        <div class="header-left">
+          <img src="/icons/icon-192.svg" alt="" class="header-logo">
+          <span class="header-title">ClawMe</span>
+        </div>
+        <div class="header-right">
+          <span id="statusDot" class="status-dot connected"></span>
+          <button id="btnSettings" class="icon-btn">&#x2699;</button>
+        </div>
+      </header>
+
+      <!-- Instructions list -->
+      <main class="main-content">
+        <div class="section-bar">
+          <h2>待执行指令</h2>
+          <button id="btnRefresh" class="icon-btn">&#x21BB;</button>
+        </div>
+        <div id="instrList" class="instr-list">
+          <div class="empty-state">暂无指令，等待 Agent 下发...</div>
+        </div>
+
+        <!-- Log -->
+        <details class="log-section">
+          <summary>执行日志 <span id="logBadge" class="badge">0</span></summary>
+          <div id="logList" class="log-list"></div>
+        </details>
+      </main>
+
+      <!-- Settings panel -->
+      <div id="settingsPanel" class="settings-panel hidden">
+        <div class="settings-header">
+          <h2>设置</h2>
+          <button id="btnCloseSettings" class="icon-btn">&times;</button>
+        </div>
+        <div class="settings-body">
+          <label>Backend URL</label>
+          <input id="settingUrl" type="url" readonly>
+          <label>Token</label>
+          <input id="settingToken" type="password" readonly>
+          <div class="toggle-row">
+            <span>自动轮询（30秒）</span>
+            <label class="switch"><input type="checkbox" id="togglePoll" checked><span class="slider"></span></label>
+          </div>
+          <div class="toggle-row">
+            <span>自动执行</span>
+            <label class="switch"><input type="checkbox" id="toggleAutoExec"><span class="slider"></span></label>
+          </div>
+          <div class="qr-section">
+            <h3>连接二维码</h3>
+            <p class="hint">其他设备扫此码可连接同一 Backend</p>
+            <div id="qrCode" class="qr-display"></div>
+          </div>
+          <button id="btnDisconnect" class="btn-danger">断开连接</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
