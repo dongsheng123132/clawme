@@ -5,6 +5,7 @@ import * as composeEmail from "./instructions/compose-email.js";
 import * as fillForm from "./instructions/fill-form.js";
 import * as click from "./instructions/click.js";
 import * as extract from "./instructions/extract.js";
+import * as addCalendar from "./instructions/add-calendar.js";
 import { reportResult } from "./api.js";
 
 const handlers = {
@@ -15,6 +16,7 @@ const handlers = {
   fill_form: fillForm,
   click,
   extract,
+  add_calendar: addCalendar,
 };
 
 export function renderPayload(type, payload) {

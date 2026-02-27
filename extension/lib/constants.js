@@ -11,6 +11,7 @@ export const TYPE_LABELS = {
   fill_form: "填表单",
   click: "点击",
   extract: "抓取",
+  add_calendar: "添加日历",
 };
 
 export const STATUS_COLORS = {
