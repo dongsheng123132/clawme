@@ -1,17 +1,52 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ClawMe — AI Agent 的管家</title>
-  <meta name="description" content="连接你的 AI Agent 与设备，接收指令，替你执行。开源、安全、跨平台。">
+  <title>ClawMe — The Execution Layer for AI Agents</title>
+  <meta name="description" content="Open-source bridge between AI Agents and your devices. Send instructions, execute on browser and mobile. Semi-automatic, secure, cross-platform.">
   <meta name="theme-color" content="#FF6B35">
   <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.json">
+
+  <!-- Structured data for AI / search engines -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ClawMe",
+    "url": "https://clawme.net",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Chrome, Web",
+    "description": "Open-source execution layer between AI Agents and user devices. Supports 7 instruction types: remind, open_url, compose_tweet, compose_email, fill_form, click, extract.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+    "sourceOrganization": { "@type": "Organization", "name": "ClawMe", "url": "https://github.com/dongsheng123132/clawme" }
+  }
+  </script>
+
   <style>
     :root { --orange: #FF6B35; --dark: #1a1a1a; --gray: #666; --light: #f8f8f8; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, sans-serif; color: var(--dark); line-height: 1.6; }
+
+    /* Lang switch */
+    .lang-switch {
+      position: fixed; top: 16px; right: 16px; z-index: 99;
+      display: flex; gap: 0; border-radius: 8px; overflow: hidden;
+      border: 2px solid rgba(255,255,255,0.4);
+    }
+    .lang-btn {
+      padding: 6px 14px; border: none; cursor: pointer;
+      font-size: 13px; font-weight: 600; background: transparent; color: rgba(255,255,255,0.7);
+    }
+    .lang-btn.active { background: rgba(255,255,255,0.2); color: #fff; }
+    .zh { display: none; }
+    body.lang-zh .zh { display: block; }
+    body.lang-zh .en { display: none; }
+    body.lang-zh .zh-inline { display: inline; }
+    body.lang-zh .en-inline { display: none; }
+    .zh-inline { display: none; }
 
     /* Hero */
     .hero {
@@ -22,7 +57,7 @@
     .hero-logo { width: 120px; height: 120px; margin-bottom: 24px; }
     .hero h1 { font-size: 48px; font-weight: 800; letter-spacing: -2px; margin-bottom: 8px; }
     .hero .tagline { font-size: 20px; opacity: 0.9; margin-bottom: 32px; font-weight: 300; }
-    .hero .subtitle { font-size: 15px; opacity: 0.7; max-width: 400px; margin-bottom: 40px; }
+    .hero .subtitle { font-size: 15px; opacity: 0.7; max-width: 460px; margin-bottom: 40px; }
     .cta-group { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
     .btn { padding: 14px 32px; border-radius: 12px; font-size: 16px; font-weight: 600;
            text-decoration: none; display: inline-block; transition: transform 0.2s; }
@@ -34,10 +69,7 @@
     .features { padding: 80px 20px; max-width: 900px; margin: 0 auto; }
     .features h2 { text-align: center; font-size: 32px; margin-bottom: 48px; }
     .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; }
-    .feature-card {
-      padding: 24px; border-radius: 16px; background: var(--light);
-      border: 1px solid #eee;
-    }
+    .feature-card { padding: 24px; border-radius: 16px; background: var(--light); border: 1px solid #eee; }
     .feature-card .icon { font-size: 36px; margin-bottom: 12px; }
     .feature-card h3 { font-size: 18px; margin-bottom: 8px; }
     .feature-card p { color: var(--gray); font-size: 14px; }
@@ -55,69 +87,97 @@
     .step-text h3 { font-size: 16px; margin-bottom: 4px; }
     .step-text p { color: var(--gray); font-size: 14px; }
 
+    /* API section */
+    .api-section { padding: 80px 20px; max-width: 800px; margin: 0 auto; }
+    .api-section h2 { text-align: center; font-size: 32px; margin-bottom: 16px; }
+    .api-section .api-desc { text-align: center; color: var(--gray); margin-bottom: 40px; font-size: 15px; }
+    .api-block { background: #1e1e2e; color: #cdd6f4; border-radius: 12px; padding: 20px; margin-bottom: 16px; overflow-x: auto; }
+    .api-block h3 { color: #a6e3a1; font-size: 14px; margin-bottom: 8px; font-weight: 600; }
+    .api-block pre { font-family: 'SF Mono', Consolas, monospace; font-size: 13px; line-height: 1.6; white-space: pre; }
+    .api-block .comment { color: #6c7086; }
+    .api-block .key { color: #89b4fa; }
+    .api-block .str { color: #a6e3a1; }
+    .api-block .method { color: #f9e2af; font-weight: 700; }
+
     /* Footer */
-    .footer {
-      text-align: center; padding: 40px 20px; color: var(--gray); font-size: 13px;
-      border-top: 1px solid #eee;
-    }
+    .footer { text-align: center; padding: 40px 20px; color: var(--gray); font-size: 13px; border-top: 1px solid #eee; }
     .footer a { color: var(--orange); text-decoration: none; }
 
     @media (max-width: 600px) {
       .hero h1 { font-size: 36px; }
       .hero .tagline { font-size: 17px; }
-      .features h2, .how h2 { font-size: 24px; }
+      .features h2, .how h2, .api-section h2 { font-size: 24px; }
+      .api-block { padding: 14px; }
+      .api-block pre { font-size: 11px; }
     }
   </style>
 </head>
 <body>
+  <!-- Language switch -->
+  <div class="lang-switch">
+    <button class="lang-btn active" onclick="setLang('en')">EN</button>
+    <button class="lang-btn" onclick="setLang('zh')">中文</button>
+  </div>
+
   <!-- Hero -->
   <section class="hero">
     <img src="/icons/icon-192.svg" alt="ClawMe" class="hero-logo">
     <h1>ClawMe</h1>
-    <p class="tagline">AI Agent 的管家 — 替你动手，不替你做主</p>
+    <p class="tagline">
+      <span class="en">The Execution Layer for AI Agents</span>
+      <span class="zh">AI Agent 的管家 — 替你动手，不替你做主</span>
+    </p>
     <p class="subtitle">
-      连接你的 AI Agent（OpenClaw 等）与浏览器、手机，
-      接收结构化指令，一键执行或自动完成。
+      <span class="en">Connect your AI Agent to your browser and phone. Receive structured instructions, execute with one click or automatically. Open source.</span>
+      <span class="zh">连接你的 AI Agent 与浏览器、手机。接收结构化指令，一键执行或自动完成。完全开源。</span>
     </p>
     <div class="cta-group">
-      <a href="/app.html" class="btn btn-white">打开 App</a>
+      <a href="/app.html" class="btn btn-white">
+        <span class="en-inline">Open App</span><span class="zh-inline">打开 App</span>
+      </a>
       <a href="https://github.com/dongsheng123132/clawme" class="btn btn-outline">GitHub</a>
+      <a href="#api" class="btn btn-outline">
+        <span class="en-inline">API Docs</span><span class="zh-inline">API 文档</span>
+      </a>
     </div>
   </section>
 
   <!-- Features -->
   <section class="features">
-    <h2>为什么用 ClawMe</h2>
+    <h2>
+      <span class="en">Why ClawMe</span>
+      <span class="zh">为什么用 ClawMe</span>
+    </h2>
     <div class="feature-grid">
       <div class="feature-card">
         <div class="icon">&#x1F916;</div>
-        <h3>Agent 指令直达设备</h3>
-        <p>不再复制粘贴 — Agent 发指令，你的设备直接执行：发推、写邮件、填表单、点击、抓取。</p>
+        <h3><span class="en">Agent → Device</span><span class="zh">Agent 指令直达设备</span></h3>
+        <p><span class="en">No more copy-paste. Your agent sends instructions, your device executes: tweet, email, fill forms, click, extract.</span><span class="zh">不再复制粘贴 — Agent 发指令，你的设备直接执行：发推、写邮件、填表单、点击、抓取。</span></p>
       </div>
       <div class="feature-card">
         <div class="icon">&#x1F4F1;</div>
-        <h3>跨平台</h3>
-        <p>浏览器插件 + 手机 PWA，一个 Token 连接所有设备。扫码即连，无需复杂配置。</p>
+        <h3><span class="en">Cross-platform</span><span class="zh">跨平台</span></h3>
+        <p><span class="en">Chrome extension + mobile PWA. One token connects all your devices. Scan QR to connect instantly.</span><span class="zh">浏览器插件 + 手机 PWA，一个 Token 连接所有设备。扫码即连。</span></p>
       </div>
       <div class="feature-card">
         <div class="icon">&#x1F512;</div>
-        <h3>你说了算</h3>
-        <p>半自动执行：每条指令你确认后再执行，也可开启自动模式。Token 授权，只认你的 Agent。</p>
+        <h3><span class="en">You Stay in Control</span><span class="zh">你说了算</span></h3>
+        <p><span class="en">Semi-automatic: confirm each instruction before execution, or enable auto-execute. Token-authenticated.</span><span class="zh">半自动执行：每条指令你确认后再执行，也可开启自动模式。Token 授权。</span></p>
       </div>
       <div class="feature-card">
         <div class="icon">&#x1F310;</div>
-        <h3>开源 AGPL</h3>
-        <p>代码完全开源，社区共建。自部署或用托管服务，你的数据你做主。</p>
+        <h3><span class="en">Open Source (AGPL)</span><span class="zh">开源 AGPL</span></h3>
+        <p><span class="en">Fully open source. Self-host or use our service. Your data stays yours.</span><span class="zh">代码完全开源，社区共建。自部署或用托管服务，你的数据你做主。</span></p>
       </div>
       <div class="feature-card">
         <div class="icon">&#x26A1;</div>
-        <h3>多步骤 Workflow</h3>
-        <p>一组指令按顺序自动执行，支持进度可视化和中止。适合复杂自动化场景。</p>
+        <h3><span class="en">Multi-step Workflows</span><span class="zh">多步骤 Workflow</span></h3>
+        <p><span class="en">Chain instructions in sequence with progress visualization and abort support.</span><span class="zh">一组指令按顺序自动执行，支持进度可视化和中止。</span></p>
       </div>
       <div class="feature-card">
         <div class="icon">&#x1F517;</div>
-        <h3>任意 Agent 接入</h3>
-        <p>不绑定特定 Agent — OpenClaw、自研 Agent 或任何支持 HTTP 的 AI 都可接入。</p>
+        <h3><span class="en">Any Agent</span><span class="zh">任意 Agent 接入</span></h3>
+        <p><span class="en">Not locked to any agent — OpenClaw, custom agents, or any HTTP-capable AI can integrate.</span><span class="zh">不绑定特定 Agent — OpenClaw、自研 Agent 或任何 HTTP AI 都可接入。</span></p>
       </div>
     </div>
   </section>
@@ -125,39 +185,106 @@
   <!-- How it works -->
   <section class="how">
     <div class="how-inner">
-      <h2>三步连通</h2>
+      <h2><span class="en">3 Steps to Connect</span><span class="zh">三步连通</span></h2>
       <div class="step">
         <div class="step-num">1</div>
         <div class="step-text">
-          <h3>安装客户端</h3>
-          <p>Chrome 安装浏览器插件，或手机打开本页添加到主屏幕（PWA）。</p>
+          <h3><span class="en">Install Client</span><span class="zh">安装客户端</span></h3>
+          <p><span class="en">Chrome extension for browser, or add this page to home screen (PWA) for mobile.</span><span class="zh">Chrome 安装浏览器插件，或手机打开本页添加到主屏幕（PWA）。</span></p>
         </div>
       </div>
       <div class="step">
         <div class="step-num">2</div>
         <div class="step-text">
-          <h3>扫码连接</h3>
-          <p>用手机扫描连接二维码，自动配置 Backend 地址和 Token，一秒连通。</p>
+          <h3><span class="en">Connect</span><span class="zh">扫码连接</span></h3>
+          <p><span class="en">Scan QR code or enter Backend URL + Token. Connected in seconds.</span><span class="zh">扫描二维码或填入 Backend URL 和 Token，一秒连通。</span></p>
         </div>
       </div>
       <div class="step">
         <div class="step-num">3</div>
         <div class="step-text">
-          <h3>Agent 发指令，你执行</h3>
-          <p>OpenClaw 等 Agent 发送指令 → 你的设备收到通知 → 点击执行或自动完成。</p>
+          <h3><span class="en">Agent Sends, You Execute</span><span class="zh">Agent 发指令，你执行</span></h3>
+          <p><span class="en">Your agent sends instructions → your device gets notified → tap to execute or auto-complete.</span><span class="zh">Agent 发送指令 → 设备收到通知 → 点击执行或自动完成。</span></p>
         </div>
       </div>
     </div>
   </section>
 
+  <!-- API Reference (Agent-friendly) -->
+  <section class="api-section" id="api">
+    <h2><span class="en">API for Agents</span><span class="zh">Agent 接入 API</span></h2>
+    <p class="api-desc">
+      <span class="en">Simple REST API. Any AI agent that can make HTTP requests can integrate in minutes.</span>
+      <span class="zh">简单 REST API，任何能发 HTTP 请求的 AI Agent 都能在几分钟内接入。</span>
+    </p>
+
+    <div class="api-block">
+      <h3><span class="en-inline">Send an instruction</span><span class="zh-inline">发送指令</span></h3>
+<pre><span class="method">POST</span> /v1/instructions
+<span class="comment">Header: X-ClawMe-Token: &lt;your-token&gt;</span>
+
+{
+  <span class="key">"target"</span>: <span class="str">"browser"</span>,
+  <span class="key">"instruction"</span>: {
+    <span class="key">"type"</span>: <span class="str">"compose_tweet"</span>,
+    <span class="key">"payload"</span>: { <span class="key">"text"</span>: <span class="str">"Hello from my AI agent!"</span> }
+  }
+}</pre>
+    </div>
+
+    <div class="api-block">
+      <h3><span class="en-inline">Supported instruction types</span><span class="zh-inline">支持的指令类型</span></h3>
+<pre><span class="str">remind</span>         <span class="comment">→ Show a reminder (title, body)</span>
+<span class="str">open_url</span>       <span class="comment">→ Open a URL in browser</span>
+<span class="str">compose_tweet</span>  <span class="comment">→ Open Twitter with pre-filled text</span>
+<span class="str">compose_email</span>  <span class="comment">→ Open Gmail/mailto with to, subject, body</span>
+<span class="str">fill_form</span>      <span class="comment">→ Auto-fill form fields by CSS selector</span>
+<span class="str">click</span>          <span class="comment">→ Click an element by CSS selector</span>
+<span class="str">extract</span>        <span class="comment">→ Extract text/attribute from page element</span></pre>
+    </div>
+
+    <div class="api-block">
+      <h3><span class="en-inline">Multi-step workflow</span><span class="zh-inline">多步骤 Workflow</span></h3>
+<pre><span class="comment">// Add meta.workflow_id and meta.step to group instructions</span>
+{
+  <span class="key">"target"</span>: <span class="str">"browser"</span>,
+  <span class="key">"instruction"</span>: { <span class="key">"type"</span>: <span class="str">"open_url"</span>, <span class="key">"payload"</span>: { <span class="key">"url"</span>: <span class="str">"..."</span> } },
+  <span class="key">"meta"</span>: { <span class="key">"workflow_id"</span>: <span class="str">"my-flow"</span>, <span class="key">"step"</span>: 1 }
+}</pre>
+    </div>
+
+    <div class="api-block">
+      <h3><span class="en-inline">Poll for results</span><span class="zh-inline">查询结果</span></h3>
+<pre><span class="method">GET</span> /v1/instructions/pending?target=browser
+<span class="comment">Header: X-ClawMe-Token: &lt;your-token&gt;</span>
+
+<span class="comment">// Client reports result after execution:</span>
+<span class="method">POST</span> /v1/instructions/:id/result
+{ <span class="key">"status"</span>: <span class="str">"ok"</span>, <span class="key">"result"</span>: <span class="str">"Filled 3 fields"</span> }</pre>
+    </div>
+  </section>
+
   <!-- Footer -->
   <footer class="footer">
-    <p>ClawMe / 虾me — 开源 AI Agent 执行层</p>
+    <p>ClawMe / 虾me — <span class="en-inline">Open-source AI Agent execution layer</span><span class="zh-inline">开源 AI Agent 执行层</span></p>
     <p style="margin-top:8px">
       <a href="https://github.com/dongsheng123132/clawme">GitHub</a> ·
       <a href="/app.html">App</a> ·
+      <a href="#api">API</a> ·
       AGPL-3.0
     </p>
   </footer>
+
+  <script>
+    function setLang(lang) {
+      document.body.classList.toggle('lang-zh', lang === 'zh');
+      document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (lang === 'zh' ? '中文' : 'EN')));
+      localStorage.setItem('clawme_lang', lang);
+    }
+    // Auto-detect language
+    const saved = localStorage.getItem('clawme_lang');
+    if (saved) { setLang(saved); }
+    else if (navigator.language.startsWith('zh')) { setLang('zh'); }
+  </script>
 </body>
 </html>
