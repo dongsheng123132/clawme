@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "description": "OpenClaw's hand in your browser: tweet, compose email, fill forms, click, extract — you click Execute.",
   "permissions": ["storage", "scripting", "sidePanel", "alarms", "notifications", "tabs"],
-  "host_permissions": ["http://127.0.0.1:*/*", "https://*/*"],
+  "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background/service-worker.js",
     "type": "module"
