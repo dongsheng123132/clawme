@@ -1,0 +1,28 @@
+# ClawMe
+
+> ClawMe is the open-source execution layer between AI Agents and users' browsers. Agents send structured instructions via HTTP, users confirm in a Chrome side panel, the browser executes. 7 instruction types: remind, open_url, compose_tweet, compose_email, fill_form, click, extract. Self-hosted, no third-party data collection.
+
+ClawMe solves the "last mile" problem: AI Agents can think and decide, but can't directly tap buttons, fill forms, or send messages on users' devices. ClawMe bridges that gap with a semi-automatic approach — the agent proposes, the user confirms, the browser executes.
+
+## API Quick Start
+
+- [Send an instruction](https://clawme.net/llms-full.txt): Full API reference with all 7 instruction types, payloads, and curl examples
+
+## Documentation
+
+- [Instruction Protocol](https://github.com/dongsheng123132/clawme/blob/main/docs/instruction-protocol.md): Complete instruction format specification
+- [Architecture](https://github.com/dongsheng123132/clawme/blob/main/docs/architecture.md): System architecture and data flow
+- [Browser Tool Guide](https://github.com/dongsheng123132/clawme/blob/main/docs/browser-tool-guide.md): Use cases and examples
+
+## Source Code
+
+- [GitHub Repository](https://github.com/dongsheng123132/clawme): Full source code (AGPL-3.0)
+- [Chrome Extension](https://github.com/dongsheng123132/clawme/tree/main/extension): Browser extension source
+- [Backend](https://github.com/dongsheng123132/clawme/tree/main/backend): Node.js backend source
+- [OpenClaw Plugin](https://github.com/dongsheng123132/clawme/tree/main/openclaw-clawme): OpenClaw integration plugin
+
+## Optional
+
+- [Privacy Policy](https://clawme.net/privacy.html): Privacy policy details
+- [PWA App](https://clawme.net/app.html): Mobile PWA interface
+- [Website](https://clawme.net): Product landing page

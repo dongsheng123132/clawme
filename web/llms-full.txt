@@ -1,0 +1,236 @@
+# ClawMe — Full API Reference for AI Agents
+
+> ClawMe is the open-source execution layer between AI Agents and users' browsers. Send structured HTTP instructions, users confirm in Chrome side panel, browser executes. Self-hosted, no third-party data.
+
+## How It Works
+
+1. You (the AI Agent) POST a JSON instruction to the user's ClawMe backend
+2. The ClawMe Chrome extension polls the backend and shows the instruction in a side panel
+3. The user reviews and clicks "Execute" (or has auto-execute enabled)
+4. The browser carries out the action (opens Twitter, fills a form, clicks a button, etc.)
+5. The result is reported back to the backend, which can relay it to you
+
+## Authentication
+
+All requests require a token. Send it as:
+- Header: `X-ClawMe-Token: <token>`
+- Or: `Authorization: Bearer <token>`
+
+The backend URL and token are configured by the user. A typical self-hosted backend runs at `http://127.0.0.1:31871` or behind a reverse proxy like `https://api.clawme.net`.
+
+## Send an Instruction
+
+```
+POST /v1/instructions
+Content-Type: application/json
+X-ClawMe-Token: <token>
+
+{
+  "target": "browser",
+  "instruction": {
+    "type": "<instruction_type>",
+    "payload": { ... }
+  },
+  "meta": {
+    "workflow_id": "optional-group-id",
+    "step": 1
+  }
+}
+```
+
+Response: `{"id": "uuid", "status": "pending"}`
+
+### target values
+- `"browser"` — execute in Chrome extension
+- `"phone"` — execute in mobile PWA
+- `"any"` — whichever client picks it up first
+
+## 7 Instruction Types
+
+### 1. remind — Show a notification
+
+```json
+{
+  "type": "remind",
+  "payload": {
+    "title": "Meeting in 10 minutes",
+    "body": "Don't forget the standup at 3pm"
+  }
+}
+```
+
+### 2. open_url — Open a URL
+
+```json
+{
+  "type": "open_url",
+  "payload": {
+    "url": "https://example.com",
+    "in_new_tab": true
+  }
+}
+```
+
+### 3. compose_tweet — Open Twitter/X with pre-filled text
+
+```json
+{
+  "type": "compose_tweet",
+  "payload": {
+    "text": "Just launched my new project! #BuildInPublic"
+  }
+}
+```
+
+Opens `https://x.com/intent/tweet?text=...` — user clicks Post.
+
+### 4. compose_email — Open Gmail or mailto with pre-filled fields
+
+```json
+{
+  "type": "compose_email",
+  "payload": {
+    "to": "alice@example.com",
+    "subject": "Meeting Reminder",
+    "body": "Hi Alice,\n\nJust a reminder about our meeting tomorrow at 3pm.\n\nBest regards",
+    "use_gmail": true
+  }
+}
+```
+
+`use_gmail: true` opens Gmail compose page. `false` opens mailto link.
+
+### 5. fill_form — Auto-fill form fields on any website
+
+```json
+{
+  "type": "fill_form",
+  "payload": {
+    "url": "https://example.com/contact",
+    "wait": 3000,
+    "fields": {
+      "#name": "John Doe",
+      "input[name=email]": "john@example.com",
+      "textarea.message": "Hello, I am interested in...",
+      "select[name=country]": "US",
+      "input[type=checkbox][name=agree]": true
+    }
+  }
+}
+```
+
+- `url` (optional): Navigate to this page first. Omit to fill on the current page.
+- `wait` (optional): Milliseconds to wait after navigation for SPA rendering (default 2000).
+- `fields`: Object mapping CSS selectors to values. Supports:
+  - Standard inputs and textareas
+  - Select dropdowns (match by value or visible text)
+  - Checkboxes and radio buttons (boolean or string)
+  - ContentEditable rich text editors (Xiaohongshu, Medium, etc.)
+  - React/Vue framework inputs (uses native value setter)
+- Alternative format: `fields` can be an array: `[{"selector": "#name", "value": "John"}]`
+
+### 6. click — Click an element on the page
+
+```json
+{
+  "type": "click",
+  "payload": {
+    "selector": "button[type=submit]",
+    "url": "https://example.com/form"
+  }
+}
+```
+
+- `selector` (required): CSS selector for the element to click.
+- `url` (optional): Navigate to this page first, then click.
+
+### 7. extract — Extract text or attributes from a page
+
+```json
+{
+  "type": "extract",
+  "payload": {
+    "selector": ".search-results",
+    "attribute": null,
+    "url": "https://example.com/search?q=test"
+  }
+}
+```
+
+- `selector` (required): CSS selector for the element.
+- `attribute` (optional): Extract a specific attribute (e.g., `"href"`, `"src"`). Default: `textContent`.
+- `url` (optional): Navigate to this page first.
+- The extracted content is returned in the execution result and relayed back to the agent.
+
+## Multi-Step Workflows
+
+Chain multiple instructions by adding `meta.workflow_id` and `meta.step`:
+
+```json
+// Step 1: Open the page
+{"target":"browser","instruction":{"type":"open_url","payload":{"url":"https://example.com/form"}},"meta":{"workflow_id":"apply","step":1}}
+
+// Step 2: Fill the form
+{"target":"browser","instruction":{"type":"fill_form","payload":{"fields":{"#name":"John","#email":"john@test.com"}}},"meta":{"workflow_id":"apply","step":2}}
+
+// Step 3: Submit
+{"target":"browser","instruction":{"type":"click","payload":{"selector":"button[type=submit]"}},"meta":{"workflow_id":"apply","step":3}}
+```
+
+The extension groups these by `workflow_id`, shows a progress bar, and executes them in `step` order. If any step fails, remaining steps are cancelled.
+
+## Poll for Pending Instructions (Client-side)
+
+```
+GET /v1/instructions/pending?target=browser
+X-ClawMe-Token: <token>
+```
+
+Response: `{"instructions": [...]}`
+
+## Report Execution Result (Client-side)
+
+```
+POST /v1/instructions/:id/result
+X-ClawMe-Token: <token>
+
+{
+  "instruction_id": "uuid",
+  "status": "ok",
+  "result": "Filled 3/3 fields"
+}
+```
+
+Status values: `"ok"`, `"failed"`, `"cancelled"`
+
+The backend can relay results to agents via the `OPENCLAW_CALLBACK_URL` environment variable.
+
+## Integration Options
+
+### Option A: Direct HTTP (any agent)
+Any AI agent that can make HTTP POST requests can integrate. Just POST to `/v1/instructions`.
+
+### Option B: OpenClaw Plugin
+Install the ClawMe plugin for OpenClaw. It registers a `clawme_send` tool:
+```
+clawme_send(target="browser", type="compose_tweet", payload={"text": "Hello!"})
+```
+
+### Option C: Build your own integration
+The API is simple REST — build a wrapper in any language.
+
+## Deployment
+
+- Backend: Node.js, self-hosted. `npm install && npm run build && npm start`
+- Default port: 31871
+- Environment variables:
+  - `PORT` — Server port (default 31871)
+  - `CLAWME_TOKENS` — Comma-separated allowed tokens (default "test")
+  - `OPENCLAW_CALLBACK_URL` — URL to relay results to agent
+  - `OPENCLAW_API_KEY` — API key for agent callback
+
+## Links
+
+- GitHub: https://github.com/dongsheng123132/clawme
+- Website: https://clawme.net
+- License: AGPL-3.0
