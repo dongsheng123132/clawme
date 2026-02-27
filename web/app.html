@@ -14,7 +14,7 @@
 </head>
 <body>
   <div id="app">
-    <!-- Connect screen (shown when not connected) -->
+    <!-- Connect screen -->
     <div id="connectScreen" class="screen">
       <div class="connect-hero">
         <img src="/icons/icon-192.svg" alt="ClawMe" class="app-logo">
@@ -46,7 +46,7 @@
       <p class="scan-hint">将二维码放入框内自动识别</p>
     </div>
 
-    <!-- Main screen (shown when connected) -->
+    <!-- Main screen -->
     <div id="mainScreen" class="screen hidden">
       <!-- Header -->
       <header class="app-header">
@@ -60,8 +60,8 @@
         </div>
       </header>
 
-      <!-- Instructions list -->
-      <main class="main-content">
+      <!-- Tab: Instructions -->
+      <main id="tabInstr" class="main-content tab-content">
         <div class="section-bar">
           <h2>待执行指令</h2>
           <button id="btnRefresh" class="icon-btn">&#x21BB;</button>
@@ -69,13 +69,48 @@
         <div id="instrList" class="instr-list">
           <div class="empty-state">暂无指令，等待 Agent 下发...</div>
         </div>
-
-        <!-- Log -->
         <details class="log-section">
           <summary>执行日志 <span id="logBadge" class="badge">0</span></summary>
           <div id="logList" class="log-list"></div>
         </details>
       </main>
+
+      <!-- Tab: Chat with Agent -->
+      <main id="tabChat" class="main-content tab-content hidden">
+        <!-- Quick actions -->
+        <div class="quick-actions">
+          <button class="qa-btn" data-action="tweet">&#x1F426; 帮我发推</button>
+          <button class="qa-btn" data-action="email">&#x2709; 帮我写邮件</button>
+          <button class="qa-btn" data-action="remind">&#x23F0; 设置提醒</button>
+          <button class="qa-btn" data-action="search">&#x1F50D; 帮我搜索</button>
+        </div>
+
+        <!-- Chat messages -->
+        <div id="chatMessages" class="chat-messages">
+          <div class="chat-welcome">
+            <p>向你的 AI Agent 发消息</p>
+            <p class="hint">Agent 收到后会通过指令回复你</p>
+          </div>
+        </div>
+
+        <!-- Chat input -->
+        <div class="chat-input-bar">
+          <input id="chatInput" type="text" placeholder="给 Agent 发消息..." autocomplete="off">
+          <button id="btnSend" class="btn-send">发送</button>
+        </div>
+      </main>
+
+      <!-- Bottom tab bar -->
+      <nav class="tab-bar">
+        <button class="tab-item active" data-tab="tabInstr">
+          <span class="tab-icon">&#x1F4CB;</span>
+          <span class="tab-label">指令</span>
+        </button>
+        <button class="tab-item" data-tab="tabChat">
+          <span class="tab-icon">&#x1F4AC;</span>
+          <span class="tab-label">对话</span>
+        </button>
+      </nav>
 
       <!-- Settings panel -->
       <div id="settingsPanel" class="settings-panel hidden">

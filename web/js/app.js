@@ -158,6 +158,7 @@ function enterMain() {
   $("settingUrl").value = config.baseUrl;
   $("settingToken").value = config.token;
   generateQR();
+  renderChat();
   refresh();
   startPolling();
 }
@@ -395,6 +396,92 @@ function renderLog() {
     </div>`
   ).join("");
 }
+
+// --- Tab switching ---
+document.querySelectorAll(".tab-item").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab-item").forEach((t) => t.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach((c) => c.classList.add("hidden"));
+    tab.classList.add("active");
+    $(tab.dataset.tab).classList.remove("hidden");
+  });
+});
+
+// --- Chat ---
+let chatHistory = JSON.parse(localStorage.getItem("clawme_chat") || "[]");
+
+async function sendMessage(text, action) {
+  if (!text.trim()) return;
+  addChatBubble("user", text);
+
+  const btn = $("btnSend");
+  btn.disabled = true;
+  try {
+    await fetch(`${config.baseUrl}/v1/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-ClawMe-Token": config.token },
+      body: JSON.stringify({ text, type: action ? "quick_action" : "chat", action }),
+    });
+    addChatBubble("agent", "已发送给 Agent，等待回复指令...");
+  } catch (e) {
+    addChatBubble("agent", "发送失败: " + (e.message || e));
+  }
+  btn.disabled = false;
+}
+
+function addChatBubble(role, text) {
+  const time = new Date().toLocaleTimeString();
+  chatHistory.push({ role, text, time });
+  if (chatHistory.length > 200) chatHistory = chatHistory.slice(-200);
+  localStorage.setItem("clawme_chat", JSON.stringify(chatHistory));
+  renderChat();
+}
+
+function renderChat() {
+  const container = $("chatMessages");
+  if (chatHistory.length === 0) {
+    container.innerHTML = `<div class="chat-welcome"><p>向你的 AI Agent 发消息</p><p class="hint">Agent 收到后会通过指令回复你</p></div>`;
+    return;
+  }
+  container.innerHTML = chatHistory.map((m) =>
+    `<div class="chat-bubble ${m.role}">
+      ${esc(m.text)}
+      <div class="bubble-time">${m.time}</div>
+    </div>`
+  ).join("");
+  container.scrollTop = container.scrollHeight;
+}
+
+$("btnSend").addEventListener("click", () => {
+  const input = $("chatInput");
+  sendMessage(input.value);
+  input.value = "";
+});
+
+$("chatInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.isComposing) {
+    e.preventDefault();
+    const input = $("chatInput");
+    sendMessage(input.value);
+    input.value = "";
+  }
+});
+
+// Quick action buttons
+document.querySelectorAll(".qa-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const action = btn.dataset.action;
+    const prompts = {
+      tweet: "帮我写一条推文，主题是：",
+      email: "帮我写一封邮件，收件人和主题是：",
+      remind: "帮我设置一个提醒：",
+      search: "帮我搜索：",
+    };
+    const prefix = prompts[action] || "";
+    $("chatInput").value = prefix;
+    $("chatInput").focus();
+  });
+});
 
 // --- Settings ---
 $("btnSettings").addEventListener("click", () => {

@@ -1,11 +1,18 @@
 import express from "express";
 import { getTokenFromRequest, isTokenAllowed } from "./auth.js";
 import { addInstruction, getPendingForTarget, getById, setResult } from "./store.js";
-import { relayResultToOpenClaw } from "./relay.js";
-import type { InstructionRequest, ResultRequest } from "./types.js";
+import { relayResultToOpenClaw, relayMessageToOpenClaw } from "./relay.js";
+import type { InstructionRequest, ResultRequest, UserMessage } from "./types.js";
 
 const app = express();
 app.use(express.json());
+app.use((_req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Content-Type, X-ClawMe-Token, Authorization");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  if (_req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
 
 const PORT = Number(process.env.PORT) || 31871;
 
@@ -67,6 +74,22 @@ app.post("/v1/instructions/:id/result", (req, res) => {
   const resultSummary = typeof body.result === "string" ? body.result : JSON.stringify(body.result ?? "");
   relayResultToOpenClaw(id, body.status, resultSummary).catch(() => {});
   res.json({ id, status: inst.status });
+});
+
+/** POST /v1/messages — 用户/PWA 发消息给 Agent */
+app.post("/v1/messages", (req, res) => {
+  const token = getTokenFromRequest(req);
+  if (!isTokenAllowed(token)) {
+    return res.status(401).json({ error: "Invalid or missing token" });
+  }
+  const body = req.body as UserMessage;
+  if (!body?.text?.trim()) {
+    return res.status(400).json({ error: "Missing text" });
+  }
+  const prefix = body.action ? `[${body.action}] ` : "";
+  const message = `${prefix}${body.text}`;
+  relayMessageToOpenClaw(message).catch(() => {});
+  res.status(201).json({ ok: true, message: "已发送给 Agent" });
 });
 
 app.get("/health", (_req, res) => res.json({ ok: true }));

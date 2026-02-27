@@ -26,3 +26,21 @@ export interface ResultRequest {
   status: "ok" | "failed" | "cancelled";
   result?: string | Record<string, unknown>;
 }
+
+/** User message from PWA/client to Agent (POST body). */
+export interface UserMessage {
+  text: string;
+  type?: "chat" | "quick_action";
+  action?: string;
+}
+
+/** Stored user message. */
+export interface StoredMessage {
+  id: string;
+  token: string;
+  text: string;
+  type: string;
+  action?: string;
+  createdAt: string;
+  relayed: boolean;
+}
