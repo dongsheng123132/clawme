@@ -7,7 +7,7 @@
 
 与 OpenClaw、SideAI 等**项目独立**，单独成产品线。
 
-本项目采用 [MIT](LICENSE) 开源协议。
+本项目采用 [AGPL-3.0](LICENSE) 开源协议。
 
 ---
 
