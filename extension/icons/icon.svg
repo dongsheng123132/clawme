@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B35"/>
+      <stop offset="100%" style="stop-color:#E84525"/>
+    </linearGradient>
+    <linearGradient id="claw" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF"/>
+      <stop offset="100%" style="stop-color:#FFE0D0"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <g transform="translate(256, 220)">
+    <!-- Left pincer -->
+    <path d="M-20,-40 C-20,-100 -80,-140 -120,-120 C-145,-108 -150,-75 -130,-55 L-50,-10"
+          stroke="url(#claw)" stroke-width="36" stroke-linecap="round" fill="none"/>
+    <!-- Right pincer -->
+    <path d="M20,-40 C20,-100 80,-140 120,-120 C145,-108 150,-75 130,-55 L50,-10"
+          stroke="url(#claw)" stroke-width="36" stroke-linecap="round" fill="none"/>
+    <!-- Base/palm -->
+    <path d="M-50,-10 Q-30,35 0,48 Q30,35 50,-10"
+          stroke="url(#claw)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <!-- Connection dot -->
+    <circle cx="0" cy="110" r="20" fill="#FFFFFF" opacity="0.9"/>
+    <circle cx="0" cy="110" r="10" fill="#FF6B35"/>
+    <!-- Signal arcs -->
+    <path d="M-30,92 Q-30,68 0,68 Q30,68 30,92" stroke="#FFFFFF" stroke-width="5" fill="none" opacity="0.6"/>
+    <path d="M-48,85 Q-48,48 0,48 Q48,48 48,85" stroke="#FFFFFF" stroke-width="5" fill="none" opacity="0.4"/>
+  </g>
+</svg>

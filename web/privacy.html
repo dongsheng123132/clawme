@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClawMe - Privacy Policy</title>
+<style>
+body { font-family: system-ui, -apple-system, sans-serif; max-width: 720px; margin: 0 auto; padding: 40px 20px; color: #333; line-height: 1.7; }
+h1 { color: #FF6B35; }
+h2 { margin-top: 2em; color: #E84525; }
+a { color: #FF6B35; }
+.date { color: #999; font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>ClawMe Privacy Policy</h1>
+<p class="date">Last updated: February 27, 2026</p>
+
+<h2>1. Overview</h2>
+<p>ClawMe ("we", "us") is an open-source browser extension and service that bridges AI Agents and users. We are committed to protecting your privacy. This policy explains what data ClawMe collects, how it is used, and your rights.</p>
+
+<h2>2. Data We Collect</h2>
+<h3>2.1 Extension (Browser)</h3>
+<ul>
+  <li><strong>Backend URL and Token</strong>: Stored locally in <code>chrome.storage.local</code> on your device. Never transmitted to us.</li>
+  <li><strong>Instructions</strong>: Fetched from your configured backend server. Instructions are between your AI Agent and your browser — we do not see or store them.</li>
+  <li><strong>Execution logs</strong>: Stored locally in your browser. Not sent anywhere.</li>
+</ul>
+
+<h3>2.2 Backend Server</h3>
+<ul>
+  <li><strong>Instructions</strong>: Stored in memory only. No database. Instructions are automatically cleared when the server restarts.</li>
+  <li><strong>Tokens</strong>: Used for authentication. Configured by the server operator (you).</li>
+  <li><strong>No user accounts</strong>: ClawMe does not require registration or personal information.</li>
+</ul>
+
+<h3>2.3 Website (clawme.net)</h3>
+<ul>
+  <li>The website is static and does not collect any personal data.</li>
+  <li>No cookies, no analytics, no tracking.</li>
+</ul>
+
+<h2>3. Data We Do NOT Collect</h2>
+<ul>
+  <li>No personal information (name, email, phone)</li>
+  <li>No browsing history</li>
+  <li>No page content (unless you explicitly use the "extract" instruction)</li>
+  <li>No analytics or telemetry</li>
+  <li>No third-party tracking</li>
+</ul>
+
+<h2>4. How Data Is Used</h2>
+<p>All data stays between your AI Agent, your self-hosted backend, and your browser. ClawMe acts as a relay — it does not analyze, monetize, or share any data.</p>
+
+<h2>5. Self-Hosted Architecture</h2>
+<p>ClawMe is designed to be self-hosted. You run your own backend server, which means:</p>
+<ul>
+  <li>Your instructions never pass through our servers</li>
+  <li>You control all data</li>
+  <li>You can audit the open-source code at <a href="https://github.com/dongsheng123132/clawme">GitHub</a></li>
+</ul>
+
+<h2>6. Permissions Explained</h2>
+<table style="border-collapse:collapse; width:100%;">
+  <tr style="border-bottom:1px solid #eee;"><td style="padding:8px;"><strong>storage</strong></td><td style="padding:8px;">Save your backend URL and token locally</td></tr>
+  <tr style="border-bottom:1px solid #eee;"><td style="padding:8px;"><strong>scripting</strong></td><td style="padding:8px;">Execute instructions (fill forms, click elements, extract content) on web pages — only when you click "Execute"</td></tr>
+  <tr style="border-bottom:1px solid #eee;"><td style="padding:8px;"><strong>sidePanel</strong></td><td style="padding:8px;">Show the ClawMe side panel UI</td></tr>
+  <tr style="border-bottom:1px solid #eee;"><td style="padding:8px;"><strong>alarms</strong></td><td style="padding:8px;">Periodic polling for new instructions from your backend</td></tr>
+  <tr style="border-bottom:1px solid #eee;"><td style="padding:8px;"><strong>notifications</strong></td><td style="padding:8px;">Desktop notifications when new instructions arrive</td></tr>
+  <tr><td style="padding:8px;"><strong>tabs</strong></td><td style="padding:8px;">Open new tabs and navigate for instruction execution</td></tr>
+</table>
+
+<h2>7. Third-Party Services</h2>
+<p>ClawMe does not integrate with any third-party analytics, advertising, or data-collection services.</p>
+
+<h2>8. Children's Privacy</h2>
+<p>ClawMe is not directed at children under 13 and does not knowingly collect data from children.</p>
+
+<h2>9. Changes to This Policy</h2>
+<p>We may update this policy as the product evolves. Changes will be posted on this page with an updated date.</p>
+
+<h2>10. Contact</h2>
+<p>For privacy questions, open an issue on <a href="https://github.com/dongsheng123132/clawme/issues">GitHub</a> or email: privacy@clawme.net</p>
+
+<hr style="margin-top:40px; border:none; border-top:1px solid #eee;">
+<p style="font-size:13px; color:#999;">ClawMe is open-source software licensed under AGPL-3.0. <a href="https://github.com/dongsheng123132/clawme">View source code</a>.</p>
+</body>
+</html>

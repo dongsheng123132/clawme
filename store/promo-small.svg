@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" viewBox="0 0 440 280">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B35"/>
+      <stop offset="100%" style="stop-color:#E84525"/>
+    </linearGradient>
+  </defs>
+  <rect width="440" height="280" rx="0" fill="url(#bg)"/>
+
+  <!-- Claw icon (simplified) -->
+  <g transform="translate(110, 90) scale(0.28)">
+    <path d="M-20,-40 C-20,-100 -80,-140 -120,-120 C-145,-108 -150,-75 -130,-55 L-50,-10"
+          stroke="#FFFFFF" stroke-width="36" stroke-linecap="round" fill="none"/>
+    <path d="M20,-40 C20,-100 80,-140 120,-120 C145,-108 150,-75 130,-55 L50,-10"
+          stroke="#FFFFFF" stroke-width="36" stroke-linecap="round" fill="none"/>
+    <path d="M-50,-10 Q-30,35 0,48 Q30,35 50,-10"
+          stroke="#FFFFFF" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <circle cx="0" cy="110" r="20" fill="#FFFFFF" opacity="0.9"/>
+    <circle cx="0" cy="110" r="10" fill="#FF6B35"/>
+  </g>
+
+  <!-- Title -->
+  <text x="165" y="105" font-family="system-ui, -apple-system, sans-serif" font-size="42" font-weight="800" fill="#FFFFFF" letter-spacing="-1">ClawMe</text>
+
+  <!-- Tagline -->
+  <text x="110" y="150" font-family="system-ui, -apple-system, sans-serif" font-size="16" fill="#FFFFFF" opacity="0.9">The Butler Between AI Agents &amp; You</text>
+
+  <!-- Feature pills -->
+  <g font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600">
+    <rect x="50" y="180" width="70" height="24" rx="12" fill="#FFFFFF" opacity="0.2"/>
+    <text x="85" y="196" fill="#FFFFFF" text-anchor="middle">Fill Forms</text>
+
+    <rect x="130" y="180" width="60" height="24" rx="12" fill="#FFFFFF" opacity="0.2"/>
+    <text x="160" y="196" fill="#FFFFFF" text-anchor="middle">Tweet</text>
+
+    <rect x="200" y="180" width="58" height="24" rx="12" fill="#FFFFFF" opacity="0.2"/>
+    <text x="229" y="196" fill="#FFFFFF" text-anchor="middle">Email</text>
+
+    <rect x="268" y="180" width="52" height="24" rx="12" fill="#FFFFFF" opacity="0.2"/>
+    <text x="294" y="196" fill="#FFFFFF" text-anchor="middle">Click</text>
+
+    <rect x="330" y="180" width="62" height="24" rx="12" fill="#FFFFFF" opacity="0.2"/>
+    <text x="361" y="196" fill="#FFFFFF" text-anchor="middle">Extract</text>
+  </g>
+
+  <!-- Bottom tagline -->
+  <text x="220" y="240" font-family="system-ui, -apple-system, sans-serif" font-size="13" fill="#FFFFFF" opacity="0.7" text-anchor="middle">AI gives instructions. You confirm. Browser executes.</text>
+</svg>

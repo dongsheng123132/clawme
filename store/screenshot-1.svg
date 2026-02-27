@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <linearGradient id="orange" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B35"/>
+      <stop offset="100%" style="stop-color:#E84525"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="800" fill="#1a1a2e"/>
+
+  <!-- Browser window mock -->
+  <rect x="40" y="40" width="820" height="720" rx="12" fill="#2d2d3d" stroke="#444" stroke-width="1"/>
+  <!-- Title bar -->
+  <rect x="40" y="40" width="820" height="36" rx="12" fill="#3a3a4a"/>
+  <rect x="40" y="64" width="820" height="12" fill="#3a3a4a"/>
+  <circle cx="62" cy="58" r="6" fill="#ff5f56"/>
+  <circle cx="82" cy="58" r="6" fill="#ffbd2e"/>
+  <circle cx="102" cy="58" r="6" fill="#27c93f"/>
+  <!-- URL bar -->
+  <rect x="180" y="48" width="500" height="20" rx="10" fill="#2d2d3d"/>
+  <text x="210" y="62" font-family="monospace" font-size="11" fill="#888">twitter.com/compose/tweet</text>
+
+  <!-- Tweet compose area mock -->
+  <rect x="120" y="140" width="660" height="300" rx="8" fill="#1e1e2e"/>
+  <text x="150" y="180" font-family="system-ui" font-size="16" fill="#888">What's happening?</text>
+  <text x="150" y="220" font-family="system-ui" font-size="18" fill="#e0e0e0">Hello from my AI Agent! Just discovered ClawMe -</text>
+  <text x="150" y="248" font-family="system-ui" font-size="18" fill="#e0e0e0">it lets AI compose tweets for me and I just click</text>
+  <text x="150" y="276" font-family="system-ui" font-size="18" fill="#e0e0e0">to confirm. The future of human-AI collaboration!</text>
+  <text x="150" y="310" font-family="system-ui" font-size="18" fill="#6B9FFF">#ClawMe #AIAgent #Automation</text>
+  <!-- Tweet button -->
+  <rect x="660" y="380" width="90" height="36" rx="18" fill="#1d9bf0"/>
+  <text x="705" y="403" font-family="system-ui" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">Post</text>
+
+  <!-- Side Panel -->
+  <rect x="880" y="40" width="360" height="720" rx="12" fill="#ffffff" stroke="#e0e0e0" stroke-width="1"/>
+
+  <!-- Side panel header -->
+  <rect x="880" y="40" width="360" height="50" rx="12" fill="#fff" stroke="#e5e5e5" stroke-width="1"/>
+  <rect x="880" y="78" width="360" height="12" fill="#fff"/>
+  <!-- Logo -->
+  <circle cx="910" cy="65" r="14" fill="url(#orange)"/>
+  <text x="930" y="71" font-family="system-ui" font-size="16" font-weight="700" fill="#1a1a1a">ClawMe</text>
+  <circle cx="1100" cy="65" r="5" fill="#10b981"/>
+  <text x="1110" y="70" font-family="system-ui" font-size="11" fill="#10b981">Connected</text>
+
+  <!-- Instruction cards -->
+  <!-- Card 1: compose_tweet - executing -->
+  <rect x="896" y="110" width="328" height="120" rx="10" fill="#fff" stroke="#FF6B35" stroke-width="2"/>
+  <rect x="908" y="122" width="100" height="22" rx="6" fill="#FF6B35"/>
+  <text x="958" y="138" font-family="system-ui" font-size="11" font-weight="600" fill="#fff" text-anchor="middle">compose_tweet</text>
+  <text x="908" y="165" font-family="system-ui" font-size="13" fill="#666">Compose: "Hello from my AI Agent!...</text>
+  <!-- Status: executing -->
+  <rect x="908" y="190" width="148" height="30" rx="8" fill="#10b981"/>
+  <text x="982" y="210" font-family="system-ui" font-size="13" font-weight="600" fill="#fff" text-anchor="middle">Executed</text>
+  <rect x="1064" y="190" width="60" height="30" rx="8" fill="#f5f5f5" stroke="#e5e5e5" stroke-width="1"/>
+  <text x="1094" y="210" font-family="system-ui" font-size="13" fill="#999" text-anchor="middle">Skip</text>
+
+  <!-- Card 2: fill_form - pending -->
+  <rect x="896" y="244" width="328" height="120" rx="10" fill="#fff" stroke="#e5e5e5" stroke-width="1"/>
+  <rect x="908" y="256" width="68" height="22" rx="6" fill="#FF6B35"/>
+  <text x="942" y="272" font-family="system-ui" font-size="11" font-weight="600" fill="#fff" text-anchor="middle">fill_form</text>
+  <text x="908" y="299" font-family="system-ui" font-size="13" fill="#666">Fill xiaohongshu.com: 2 fields</text>
+  <rect x="908" y="324" width="148" height="30" rx="8" fill="#FF6B35"/>
+  <text x="982" y="344" font-family="system-ui" font-size="13" font-weight="600" fill="#fff" text-anchor="middle">Execute</text>
+  <rect x="1064" y="324" width="60" height="30" rx="8" fill="#f5f5f5" stroke="#e5e5e5" stroke-width="1"/>
+  <text x="1094" y="344" font-family="system-ui" font-size="13" fill="#999" text-anchor="middle">Skip</text>
+
+  <!-- Card 3: remind -->
+  <rect x="896" y="378" width="328" height="100" rx="10" fill="#fff" stroke="#e5e5e5" stroke-width="1"/>
+  <rect x="908" y="390" width="60" height="22" rx="6" fill="#FF6B35"/>
+  <text x="938" y="406" font-family="system-ui" font-size="11" font-weight="600" fill="#fff" text-anchor="middle">remind</text>
+  <text x="908" y="435" font-family="system-ui" font-size="13" fill="#666">Meeting reminder: standup in 5min</text>
+  <rect x="908" y="448" width="148" height="30" rx="8" fill="#FF6B35"/>
+  <text x="982" y="468" font-family="system-ui" font-size="13" font-weight="600" fill="#fff" text-anchor="middle">Execute</text>
+
+  <!-- Log section -->
+  <rect x="896" y="500" width="328" height="140" rx="10" fill="#f9f9f9" stroke="#e5e5e5" stroke-width="1"/>
+  <text x="912" y="524" font-family="system-ui" font-size="13" font-weight="600" fill="#1a1a1a">Execution Log</text>
+  <text x="912" y="550" font-family="monospace" font-size="11" fill="#999">16:02 open_url</text>
+  <text x="1050" y="550" font-family="monospace" font-size="11" fill="#10b981">OK</text>
+  <text x="912" y="570" font-family="monospace" font-size="11" fill="#999">16:01 compose_tweet</text>
+  <text x="1050" y="570" font-family="monospace" font-size="11" fill="#10b981">OK</text>
+  <text x="912" y="590" font-family="monospace" font-size="11" fill="#999">15:58 remind</text>
+  <text x="1050" y="590" font-family="monospace" font-size="11" fill="#10b981">OK</text>
+  <text x="912" y="610" font-family="monospace" font-size="11" fill="#999">15:55 extract</text>
+  <text x="1050" y="610" font-family="monospace" font-size="11" fill="#10b981">OK</text>
+
+  <!-- Big headline -->
+  <text x="640" y="760" font-family="system-ui" font-size="20" font-weight="700" fill="#fff" text-anchor="middle" opacity="0.9">AI Agent sends instructions → Side Panel shows them → You confirm → Browser executes</text>
+</svg>
