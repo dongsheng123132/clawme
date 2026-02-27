@@ -12,6 +12,7 @@ export const TYPE_LABELS = {
   click: "点击",
   extract: "抓取",
   add_calendar: "添加日历",
+  upload_file: "上传文件",
 };
 
 export const STATUS_COLORS = {

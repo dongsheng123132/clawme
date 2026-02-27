@@ -6,6 +6,7 @@ import * as fillForm from "./instructions/fill-form.js";
 import * as click from "./instructions/click.js";
 import * as extract from "./instructions/extract.js";
 import * as addCalendar from "./instructions/add-calendar.js";
+import * as uploadFile from "./instructions/upload-file.js";
 import { reportResult } from "./api.js";
 
 const handlers = {
@@ -17,6 +18,7 @@ const handlers = {
   click,
   extract,
   add_calendar: addCalendar,
+  upload_file: uploadFile,
 };
 
 export function renderPayload(type, payload) {
