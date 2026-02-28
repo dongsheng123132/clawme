@@ -1,6 +1,6 @@
 import express from "express";
 import { getTokenFromRequest, isTokenAllowed } from "./auth.js";
-import { addInstruction, getPendingForTarget, getById, setResult } from "./store.js";
+import { addInstruction, getPendingForTarget, getById, setResult, addMessage, getPendingMessages, markMessageRelayed } from "./store.js";
 import { relayResultToOpenClaw, relayMessageToOpenClaw } from "./relay.js";
 import type { InstructionRequest, ResultRequest, UserMessage } from "./types.js";
 
@@ -76,7 +76,7 @@ app.post("/v1/instructions/:id/result", (req, res) => {
   res.json({ id, status: inst.status });
 });
 
-/** POST /v1/messages — 浏览器插件 Chat 发消息，转发给 OpenClaw */
+/** POST /v1/messages — 浏览器插件 Chat 发消息 */
 app.post("/v1/messages", async (req, res) => {
   const token = getTokenFromRequest(req);
   if (!isTokenAllowed(token)) {
@@ -86,12 +86,39 @@ app.post("/v1/messages", async (req, res) => {
   if (!body?.text?.trim()) {
     return res.status(400).json({ error: "Missing text" });
   }
-  const prefix = body.action ? `[${body.action}] ` : "";
-  const message = `${prefix}${body.text}`;
 
-  // Relay to OpenClaw — OpenClaw's AI processes and sends back clawme_send instructions
-  relayMessageToOpenClaw(message).catch(() => {});
-  res.status(201).json({ ok: true, message: "已发送给 Agent" });
+  // Store in message queue (any AI agent can poll this)
+  const stored = addMessage(token!, body.text, body.action);
+
+  // Also try relaying to OpenClaw if configured
+  const prefix = body.action ? `[${body.action}] ` : "";
+  relayMessageToOpenClaw(`${prefix}${body.text}`).catch(() => {});
+
+  res.status(201).json({ ok: true, id: stored.id, message: "已发送给 Agent" });
+});
+
+/** GET /v1/messages/pending — AI agent 拉取待处理消息 */
+app.get("/v1/messages/pending", (req, res) => {
+  const token = getTokenFromRequest(req) ?? (req.query.token as string) ?? null;
+  if (!isTokenAllowed(token)) {
+    return res.status(401).json({ error: "Invalid or missing token" });
+  }
+  const ack = req.query.ack === "true"; // auto-acknowledge after read
+  const messages = getPendingMessages(token!);
+  if (ack) {
+    for (const m of messages) markMessageRelayed(token!, m.id);
+  }
+  res.json({ messages });
+});
+
+/** POST /v1/messages/:id/ack — AI agent 确认已处理消息 */
+app.post("/v1/messages/:id/ack", (req, res) => {
+  const token = getTokenFromRequest(req);
+  if (!isTokenAllowed(token)) {
+    return res.status(401).json({ error: "Invalid or missing token" });
+  }
+  markMessageRelayed(token!, req.params.id);
+  res.json({ ok: true });
 });
 
 app.get("/health", (_req, res) => res.json({ ok: true }));

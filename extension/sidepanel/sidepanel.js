@@ -414,20 +414,63 @@ function addChatBubble(role, text, context) {
 
 async function chatSend(text, context, action) {
   if (!text.trim()) return;
-  addChatBubble("user", text, context);
 
-  const fullMessage = context ? `${context}\n\n${text}` : text;
+  // Auto-scan form if user mentions filling and no context yet
+  const wantForm = /填|表单|form|fill/i.test(text) && !context;
+  let formContext = "";
+  if (wantForm) {
+    try {
+      const formData = await scanCurrentForm();
+      const fieldSummary = formData.fields.map((f) => {
+        let desc = `- 「${f.label || "无标签"}」 类型=${f.type} 选择器="${f.selector}"`;
+        if (f.placeholder) desc += ` placeholder="${f.placeholder}"`;
+        if (f.required) desc += " [必填]";
+        if (f.options) desc += ` 选项=[${f.options.map((o) => o.text).join(", ")}]`;
+        if (f.currentValue) desc += ` 当前值="${f.currentValue}"`;
+        return desc;
+      }).join("\n");
+      formContext = `[扫描表单] 页面: ${formData.pageTitle}\nURL: ${formData.pageUrl}\n\n表单字段:\n${fieldSummary}`;
+    } catch (_) { /* ignore scan failure */ }
+  }
+
+  const finalContext = context || formContext;
+  addChatBubble("user", text, finalContext);
+
+  const fullMessage = finalContext ? `${finalContext}\n\n${text}` : text;
+  const finalAction = action || (formContext ? "form_scan" : "chat");
   try {
-    const result = await sendMessage(fullMessage, action || "chat");
-    addChatBubble("agent", "已发送给 Agent，等待指令回复...\n切到「指令」tab 查看");
+    await sendMessage(fullMessage, finalAction);
+    addChatBubble("agent", "已发送给 Agent，等待指令回复...\n收到后会自动出现在「指令」tab");
 
-    // Auto-refresh to pick up any instructions the Agent generates
-    setTimeout(() => refresh(), 2000);
-    setTimeout(() => refresh(), 5000);
-    setTimeout(() => refresh(), 10000);
+    // Poll for AI response (instructions)
+    pollForReply();
   } catch (e) {
     addChatBubble("agent", "发送失败: " + (e.message || e));
   }
+}
+
+// Poll backend for new instructions after sending a message
+function pollForReply() {
+  let attempts = 0;
+  const prevCount = currentInstructions.length;
+  const timer = setInterval(async () => {
+    attempts++;
+    try {
+      const data = await fetchPending();
+      const newInstructions = data.instructions || [];
+      if (newInstructions.length > prevCount) {
+        currentInstructions = newInstructions;
+        renderInstructions();
+        // Notify in chat
+        const latest = newInstructions[newInstructions.length - 1];
+        const label = TYPE_LABELS[latest?.instruction?.type] || latest?.instruction?.type;
+        addChatBubble("agent", `Agent 回复了 [${label}] 指令！切到「指令」tab 执行`);
+        clearInterval(timer);
+        return;
+      }
+    } catch (_) {}
+    if (attempts >= 20) clearInterval(timer); // stop after ~60s
+  }, 3000);
 }
 
 document.getElementById("chatSendBtn").addEventListener("click", () => {
@@ -446,6 +489,12 @@ chatInputEl.addEventListener("keydown", (e) => {
 // --- Scan Form (shared by both tab and chat quick action) ---
 
 async function doScanForm() {
+  // Switch to chat tab first
+  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.add("hidden"));
+  document.querySelector('[data-tab="chatTab"]').classList.add("active");
+  document.getElementById("chatTab").classList.remove("hidden");
+
   try {
     const formData = await scanCurrentForm();
     const fieldSummary = formData.fields.map((f) => {
@@ -458,15 +507,7 @@ async function doScanForm() {
     }).join("\n");
 
     const context = `[扫描表单] 页面: ${formData.pageTitle}\nURL: ${formData.pageUrl}\n\n表单字段:\n${fieldSummary}`;
-    const instruction = "请根据我的背景信息和页面上下文，生成合适的内容帮我填写这个表单。通过 ClawMe fill_form 指令回填，字段选择器已提供，直接用 selector 作为 fields 的 key。";
-
-    // Switch to chat tab and send
-    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.add("hidden"));
-    document.querySelector('[data-tab="chatTab"]').classList.add("active");
-    document.getElementById("chatTab").classList.remove("hidden");
-
-    await chatSend(instruction, context, "form_scan");
+    await chatSend("请帮我填写这个表单，生成 fill_form 指令，用 selector 作为 fields 的 key。", context, "form_scan");
     addLogEntry("form_scan", "ok", `扫描 ${formData.fields.length} 个字段，已发给 Agent`);
   } catch (e) {
     showStatus("扫描失败: " + (e.message || e));
