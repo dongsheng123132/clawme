@@ -1,103 +1,82 @@
 ---
 name: clawme
-description: Execute actions in user's browser via ClawMe extension — tweet, email, fill forms, click elements, extract content. 7 instruction types. User confirms in side panel.
 version: 1.0.0
-metadata: {"openclaw":{"emoji":"claw","primaryEnv":"CLAWME_CLIENT_TOKEN","requires":{"env":["CLAWME_CLIENT_TOKEN"]}}}
+description: Send instructions to user's real browser via ClawMe Chrome extension. Fill forms, tweet, email, click, extract — user sees and confirms each action in the side panel. Unlike headless browsers, runs in the user's actual Chrome with their login sessions.
+tags: ["browser", "automation", "form-fill", "chrome-extension", "twitter", "email"]
+metadata: {"openclaw":{"emoji":"🦞","primaryEnv":"CLAWME_CLIENT_TOKEN","requires":{"env":["CLAWME_CLIENT_TOKEN"]}}}
 ---
 
-# ClawMe — Execute Actions in User's Browser
+# ClawMe — Execute Actions in User's Real Browser
 
-When the user wants to **do things in the browser**, use **clawme_send** to send instructions (set target to `browser`). The user sees instructions in the ClawMe browser extension side panel and clicks "Execute" to carry them out.
+Send instructions to the user's Chrome browser via the ClawMe extension. The user sees each instruction in a side panel and clicks "Execute" to confirm. Unlike headless browsers, ClawMe runs in the user's real browser with their actual login sessions.
 
-## Compose Tweet (X/Twitter)
+**Setup**: User installs ClawMe Chrome extension, configures Backend URL and Token.
 
-When user says "tweet about...", "post on X...", "send a tweet saying...":
+## How to Send Instructions
 
-- **type**: `compose_tweet`
-- **payload**: `{ "text": "tweet content" }`
+Use the `clawme_send` tool if available. Otherwise, make an HTTP POST:
 
-Example: `clawme_send(target="browser", type="compose_tweet", payload={"text": "Just launched my new project! #BuildInPublic"})`
-Opens Twitter/X compose page with pre-filled text. User clicks Post.
+```
+POST ${CLAWME_BASE_URL:-https://api.clawme.net}/v1/instructions
+Headers: Content-Type: application/json, X-ClawMe-Token: ${CLAWME_CLIENT_TOKEN}
+Body: {"target":"browser","instruction":{"type":"<type>","payload":{...}}}
+```
 
-## Compose Email
+## Instruction Types
 
-When user says "write an email to...", "send email to...":
+### compose_tweet
+When user says "tweet about...", "post on X..."
+```json
+{"type":"compose_tweet","payload":{"text":"tweet content"}}
+```
 
-- **type**: `compose_email`
-- **payload**: `{ "to": "email@example.com", "subject": "Subject", "body": "Email body", "use_gmail": true }`
-  `use_gmail` defaults to true (opens Gmail compose). Set false for mailto link.
+### compose_email
+When user says "write email to...", "send email..."
+```json
+{"type":"compose_email","payload":{"to":"email@example.com","subject":"Subject","body":"Body text","use_gmail":true}}
+```
 
-Example: `clawme_send(target="browser", type="compose_email", payload={"to":"alice@example.com","subject":"Meeting Reminder","body":"Meeting at 3pm tomorrow."})`
+### fill_form
+When user says "fill the form...", "enter my info..."
+```json
+{"type":"fill_form","payload":{"url":"https://example.com/form","fields":{"#name":"John","input[name=email]":"john@example.com","select[name=country]":"US"}}}
+```
+Supports: inputs, textareas, selects, checkboxes, radio, contenteditable (Xiaohongshu, Medium). Use CSS selectors as field keys. Omit `url` for current page.
 
-## Fill Form
+### click
+When user says "click the button...", "submit the form..."
+```json
+{"type":"click","payload":{"selector":"button[type=submit]","url":"https://example.com/form"}}
+```
 
-When user says "fill the form on...", "enter my info on this page...":
+### extract
+When user says "get the text from...", "scrape..."
+```json
+{"type":"extract","payload":{"selector":".results","url":"https://example.com/search"}}
+```
+Result (extracted text) is reported back to the agent.
 
-- **type**: `fill_form`
-- **payload**: `{ "url": "optional page URL; omit for current page", "fields": { "CSS_selector": "value", ... } }`
+### open_url
+```json
+{"type":"open_url","payload":{"url":"https://example.com","in_new_tab":true}}
+```
 
-Example: `clawme_send(target="browser", type="fill_form", payload={"url":"https://example.com/contact","fields":{"#name":"John Doe","input[name=email]":"john@example.com"}})`
-
-Supports: standard inputs, textareas, selects, checkboxes, radio buttons, and contenteditable rich text editors (like Xiaohongshu, Medium). Selectors must match the target page (e.g. `#id`, `input[name=xxx]`, `.class`).
-
-## Click Element
-
-When user says "click the submit button on...", "press the login button...":
-
-- **type**: `click`
-- **payload**: `{ "selector": "CSS selector", "url": "optional, navigate first" }`
-
-Example: `clawme_send(target="browser", type="click", payload={"selector":"button[type=submit]","url":"https://example.com/form"})`
-
-## Extract Content
-
-When user says "get the text from...", "scrape the results...", "what does this page say...":
-
-- **type**: `extract`
-- **payload**: `{ "selector": "CSS selector", "attribute": "optional attr name", "url": "optional, navigate first" }`
-
-Example: `clawme_send(target="browser", type="extract", payload={"selector":".search-results","url":"https://example.com/search?q=test"})`
-Returns the textContent (or specified attribute) of the matched element. Result is sent back to the agent.
-
-## Open URL
-
-- **type**: `open_url`
-- **payload**: `{ "url": "https://...", "in_new_tab": true }`
-
-## Remind / Notify
-
-- **type**: `remind`
-- **payload**: `{ "title": "Title", "body": "Message body" }`
-
-Shows a desktop notification. User sees it in the side panel.
+### remind
+```json
+{"type":"remind","payload":{"title":"Meeting","body":"Team standup in 5 minutes"}}
+```
 
 ## Multi-Step Workflows
 
-Chain multiple instructions by adding `meta.workflow_id` and `meta.step`:
-
+Chain instructions with `meta.workflow_id` and `meta.step`:
 ```
-clawme_send(target="browser", type="open_url", payload={"url":"https://example.com/form"}, meta={"workflow_id":"apply-job","step":1})
-clawme_send(target="browser", type="fill_form", payload={"fields":{"#name":"John"}}, meta={"workflow_id":"apply-job","step":2})
-clawme_send(target="browser", type="click", payload={"selector":"button[type=submit]"}, meta={"workflow_id":"apply-job","step":3})
+POST /v1/instructions — {"target":"browser","instruction":{"type":"open_url","payload":{"url":"..."}}, "meta":{"workflow_id":"signup","step":1}}
+POST /v1/instructions — {"target":"browser","instruction":{"type":"fill_form","payload":{"fields":{...}}}, "meta":{"workflow_id":"signup","step":2}}
+POST /v1/instructions — {"target":"browser","instruction":{"type":"click","payload":{"selector":"button[type=submit]"}}, "meta":{"workflow_id":"signup","step":3}}
 ```
+User sees a workflow card with progress bar and can execute all steps sequentially.
 
-User sees a workflow progress bar and can execute all steps sequentially.
+## Environment Variables
 
-## API (when clawme_send tool is not available)
-
-If the `clawme_send` tool is not registered, you can call ClawMe's HTTP API directly:
-
-```
-POST ${CLAWME_BASE_URL}/v1/instructions
-Headers: Content-Type: application/json, X-ClawMe-Token: ${CLAWME_CLIENT_TOKEN}
-Body: { "target": "browser", "instruction": { "type": "<type>", "payload": { ... } } }
-```
-
-Default `CLAWME_BASE_URL` is `http://127.0.0.1:31871`. For cloud-hosted backends, set it to `https://api.clawme.net` or the user's custom URL.
-
-## Setup
-
-1. Install ClawMe Chrome extension from Chrome Web Store (or load unpacked)
-2. In the extension side panel, configure Backend URL and Token
-3. Set env vars: `CLAWME_CLIENT_TOKEN` (matches the extension's token), `CLAWME_BASE_URL` (optional)
-4. The extension polls the backend every 30 seconds for new instructions
+- `CLAWME_CLIENT_TOKEN` (required) — matches the token configured in the Chrome extension
+- `CLAWME_BASE_URL` (optional) — default `https://api.clawme.net`, or `http://127.0.0.1:31871` for local

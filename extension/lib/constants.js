@@ -1,4 +1,5 @@
 export const DEFAULT_BASE = "http://127.0.0.1:31871";
+export const AI_ENDPOINT = "https://clawme.net/api/ai";
 export const POLL_INTERVAL_SECONDS = 30;
 export const POLL_ALARM_NAME = "clawme-poll";
 export const LOG_MAX_ENTRIES = 100;

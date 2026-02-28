@@ -1,4 +1,4 @@
-import { DEFAULT_BASE } from "./constants.js";
+import { DEFAULT_BASE, AI_ENDPOINT } from "./constants.js";
 
 export async function getConfig() {
   const r = await chrome.storage.local.get({ baseUrl: DEFAULT_BASE, token: "" });
@@ -24,12 +24,22 @@ export async function reportResult(instructionId, status, result) {
   });
 }
 
+/**
+ * Send message to AI via Vercel serverless function.
+ * The AI processes the message and returns a ClawMe instruction.
+ * Also forwards the instruction to the user's backend for queue/poll.
+ */
 export async function sendMessage(text, action) {
   const { baseUrl, token } = await getConfig();
-  const res = await fetch(`${baseUrl}/v1/messages`, {
+  const res = await fetch(AI_ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-ClawMe-Token": token },
-    body: JSON.stringify({ text, type: "quick_action", action }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text,
+      action,
+      backendUrl: baseUrl,
+      token,
+    }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
