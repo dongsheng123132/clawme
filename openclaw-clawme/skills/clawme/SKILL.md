@@ -1,6 +1,8 @@
 ---
 name: clawme
 description: Execute actions in user's browser via ClawMe extension — tweet, email, fill forms, click elements, extract content. 7 instruction types. User confirms in side panel.
+version: 1.0.0
+metadata: {"openclaw":{"emoji":"claw","primaryEnv":"CLAWME_CLIENT_TOKEN","requires":{"env":["CLAWME_CLIENT_TOKEN"]}}}
 ---
 
 # ClawMe — Execute Actions in User's Browser
@@ -80,3 +82,22 @@ clawme_send(target="browser", type="click", payload={"selector":"button[type=sub
 ```
 
 User sees a workflow progress bar and can execute all steps sequentially.
+
+## API (when clawme_send tool is not available)
+
+If the `clawme_send` tool is not registered, you can call ClawMe's HTTP API directly:
+
+```
+POST ${CLAWME_BASE_URL}/v1/instructions
+Headers: Content-Type: application/json, X-ClawMe-Token: ${CLAWME_CLIENT_TOKEN}
+Body: { "target": "browser", "instruction": { "type": "<type>", "payload": { ... } } }
+```
+
+Default `CLAWME_BASE_URL` is `http://127.0.0.1:31871`. For cloud-hosted backends, set it to `https://api.clawme.net` or the user's custom URL.
+
+## Setup
+
+1. Install ClawMe Chrome extension from Chrome Web Store (or load unpacked)
+2. In the extension side panel, configure Backend URL and Token
+3. Set env vars: `CLAWME_CLIENT_TOKEN` (matches the extension's token), `CLAWME_BASE_URL` (optional)
+4. The extension polls the backend every 30 seconds for new instructions

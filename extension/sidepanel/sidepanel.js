@@ -420,9 +420,31 @@ async function chatSend(text, context, action) {
 
   const fullMessage = context ? `${context}\n\n${text}` : text;
   try {
-    await sendMessage(fullMessage, action || "chat");
-    addChatBubble("agent", "已发送给 Agent，等待指令回复...");
+    addChatBubble("agent", "AI 处理中...");
+    const result = await sendMessage(fullMessage, action || "chat");
+
+    // Remove the "processing" bubble
+    chatHistory.pop();
+
+    if (result.ok && result.instruction) {
+      const type = result.instruction.type;
+      const label = TYPE_LABELS[type] || type;
+      const payloadPreview = JSON.stringify(result.instruction.payload || {}, null, 2);
+      const preview = payloadPreview.length > 300 ? payloadPreview.slice(0, 300) + "..." : payloadPreview;
+      addChatBubble("agent", `已生成 [${label}] 指令，切到「指令」tab 查看并执行\n\n${preview}`);
+
+      // Auto-refresh instructions so the new one appears
+      refresh();
+    } else if (result.ok) {
+      addChatBubble("agent", result.message || "已发送给 Agent，等待指令回复...");
+    } else {
+      addChatBubble("agent", "AI 处理失败: " + (result.message || "未知错误"));
+    }
   } catch (e) {
+    // Remove the "processing" bubble if still there
+    if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].text === "AI 处理中...") {
+      chatHistory.pop();
+    }
     addChatBubble("agent", "发送失败: " + (e.message || e));
   }
 }
