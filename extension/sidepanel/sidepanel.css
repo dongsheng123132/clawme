@@ -389,3 +389,7 @@ h2 { font-size: 14px; font-weight: 600; }
 .empty { color: var(--text-secondary); text-align: center; padding: 20px 0; }
 .error { color: var(--danger); font-size: 12px; padding: 4px 0; }
 .status-msg { font-size: 12px; color: var(--success); padding: 4px 0; }
+
+/* Scan form button */
+#scanFormBtn { font-size: 14px; padding: 2px 6px; }
+#scanFormBtn:disabled { opacity: 0.5; cursor: wait; }

@@ -23,3 +23,14 @@ export async function reportResult(instructionId, status, result) {
     body: JSON.stringify({ instruction_id: instructionId, status, result }),
   });
 }
+
+export async function sendMessage(text, action) {
+  const { baseUrl, token } = await getConfig();
+  const res = await fetch(`${baseUrl}/v1/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-ClawMe-Token": token },
+    body: JSON.stringify({ text, type: "quick_action", action }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

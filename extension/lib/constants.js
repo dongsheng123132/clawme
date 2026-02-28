@@ -13,6 +13,7 @@ export const TYPE_LABELS = {
   extract: "抓取",
   add_calendar: "添加日历",
   upload_file: "上传文件",
+  form_scan: "扫描表单",
 };
 
 export const STATUS_COLORS = {

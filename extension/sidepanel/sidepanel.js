@@ -1,7 +1,8 @@
 import { DEFAULT_BASE, TYPE_LABELS, LOG_MAX_ENTRIES } from "../lib/constants.js";
-import { fetchPending, reportResult } from "../lib/api.js";
+import { fetchPending, reportResult, sendMessage } from "../lib/api.js";
 import { renderPayload, executeInstruction, replayInstruction } from "../lib/executor.js";
 import { groupByWorkflow, WorkflowRunner } from "../lib/workflow.js";
+import { scanCurrentForm } from "../lib/instructions/scan-form.js";
 
 // --- DOM refs ---
 const listEl = document.getElementById("list");
@@ -387,6 +388,38 @@ document.getElementById("refreshBtn").addEventListener("click", () => {
 });
 
 document.getElementById("clearLog").addEventListener("click", clearLog);
+
+// --- Scan Form: extract → send to Agent → Agent returns fill_form ---
+document.getElementById("scanFormBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("scanFormBtn");
+  const origText = btn.textContent;
+  btn.textContent = "⏳";
+  btn.disabled = true;
+
+  try {
+    const formData = await scanCurrentForm();
+    const fieldSummary = formData.fields.map((f) => {
+      let desc = `- 「${f.label || "无标签"}」 类型=${f.type} 选择器="${f.selector}"`;
+      if (f.placeholder) desc += ` placeholder="${f.placeholder}"`;
+      if (f.required) desc += " [必填]";
+      if (f.options) desc += ` 选项=[${f.options.map((o) => o.text).join(", ")}]`;
+      if (f.currentValue) desc += ` 当前值="${f.currentValue}"`;
+      return desc;
+    }).join("\n");
+
+    const message = `[form_scan] 用户请求帮填表单\n\n页面: ${formData.pageTitle}\nURL: ${formData.pageUrl}\n\n表单字段:\n${fieldSummary}\n\n请根据上下文生成合适的内容，通过 ClawMe fill_form 指令回填。字段选择器已提供，直接用 selector 作为 fields 的 key。`;
+
+    await sendMessage(message, "form_scan");
+    showStatus("已发送给 Agent，等待回填指令...");
+    addLogEntry("form_scan", "ok", `扫描 ${formData.fields.length} 个字段，已发给 Agent`);
+  } catch (e) {
+    showStatus("扫描失败: " + (e.message || e));
+    addLogEntry("form_scan", "failed", e.message || String(e));
+  } finally {
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
+});
 
 // Load config and do initial fetch
 loadConfig().then(() => refresh());
