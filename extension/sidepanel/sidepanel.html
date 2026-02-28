@@ -32,24 +32,58 @@
     </div>
   </details>
 
-  <!-- Instructions -->
-  <div class="section">
-    <div class="section-header">
-      <h2>待执行指令</h2>
-      <div style="display:flex;gap:4px">
-        <button id="scanFormBtn" class="icon-btn" title="扫描当前页面表单，发给 Agent 帮填">📋</button>
-        <button id="refreshBtn" class="icon-btn" title="刷新">↻</button>
-      </div>
-    </div>
-    <div id="list"></div>
+  <!-- Tab bar -->
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="instrTab">指令</button>
+    <button class="tab-btn" data-tab="chatTab">Agent 对话</button>
   </div>
 
-  <!-- Execution Log -->
-  <details class="section log-section" open>
-    <summary>执行日志 <span id="logCount" class="badge">0</span></summary>
-    <div id="logList" class="log-list"></div>
-    <button id="clearLog" class="text-btn">清空日志</button>
-  </details>
+  <!-- Tab: Instructions -->
+  <div id="instrTab" class="tab-panel">
+    <div class="section">
+      <div class="section-header">
+        <h2>待执行指令</h2>
+        <div style="display:flex;gap:4px">
+          <button id="scanFormBtn" class="icon-btn" title="扫描当前页面表单，发给 Agent 帮填">📋</button>
+          <button id="refreshBtn" class="icon-btn" title="刷新">↻</button>
+        </div>
+      </div>
+      <div id="list"></div>
+    </div>
+
+    <!-- Execution Log -->
+    <details class="section log-section">
+      <summary>执行日志 <span id="logCount" class="badge">0</span></summary>
+      <div id="logList" class="log-list"></div>
+      <button id="clearLog" class="text-btn">清空日志</button>
+    </details>
+  </div>
+
+  <!-- Tab: Agent Chat -->
+  <div id="chatTab" class="tab-panel hidden">
+    <!-- Quick actions -->
+    <div class="chat-quick-actions">
+      <button class="qa-chip" data-qa="scan_form">📋 扫描表单</button>
+      <button class="qa-chip" data-qa="scan_page">📄 扫描页面</button>
+      <button class="qa-chip" data-qa="tweet">🐦 帮我发推</button>
+      <button class="qa-chip" data-qa="email">✉️ 写邮件</button>
+      <button class="qa-chip" data-qa="remind">⏰ 设置提醒</button>
+    </div>
+
+    <!-- Chat messages -->
+    <div id="chatMessages" class="chat-messages">
+      <div class="chat-welcome">
+        <p>跟你的 AI Agent 对话</p>
+        <p class="chat-hint">Agent 收到后会回复指令，切到「指令」tab 执行</p>
+      </div>
+    </div>
+
+    <!-- Chat input -->
+    <div class="chat-input-bar">
+      <input id="chatInput" type="text" placeholder="给 Agent 发消息..." autocomplete="off">
+      <button id="chatSendBtn" class="btn btn-exec">发送</button>
+    </div>
+  </div>
 
   <script type="module" src="sidepanel.js"></script>
 </body>

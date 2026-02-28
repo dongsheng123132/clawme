@@ -355,10 +355,12 @@ logListEl.addEventListener("click", (e) => {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "poll-result") {
+    const prevCount = currentInstructions.length;
     currentInstructions = msg.instructions || [];
     renderInstructions();
   }
 });
+
 
 // --- Utilities ---
 
@@ -368,6 +370,157 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// --- Tab switching ---
+
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.add("hidden"));
+    btn.classList.add("active");
+    document.getElementById(btn.dataset.tab).classList.remove("hidden");
+  });
+});
+
+// --- Chat ---
+
+let chatHistory = JSON.parse(localStorage.getItem("clawme_chat") || "[]");
+const chatMessagesEl = document.getElementById("chatMessages");
+const chatInputEl = document.getElementById("chatInput");
+
+function renderChat() {
+  if (chatHistory.length === 0) {
+    chatMessagesEl.innerHTML = `<div class="chat-welcome"><p>跟你的 AI Agent 对话</p><p class="chat-hint">Agent 收到后会回复指令，切到「指令」tab 执行</p></div>`;
+    return;
+  }
+  chatMessagesEl.innerHTML = chatHistory.map((m) =>
+    `<div class="chat-bubble ${m.role}">
+      ${m.context ? `<div class="bubble-context">${escapeHtml(m.context)}</div>` : ""}
+      ${escapeHtml(m.text)}
+      <div class="bubble-time">${m.time}</div>
+    </div>`
+  ).join("");
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+function addChatBubble(role, text, context) {
+  chatHistory.push({
+    role,
+    text,
+    context: context || "",
+    time: new Date().toLocaleTimeString(),
+  });
+  if (chatHistory.length > 200) chatHistory = chatHistory.slice(-200);
+  localStorage.setItem("clawme_chat", JSON.stringify(chatHistory));
+  renderChat();
+}
+
+async function chatSend(text, context, action) {
+  if (!text.trim()) return;
+  addChatBubble("user", text, context);
+
+  const fullMessage = context ? `${context}\n\n${text}` : text;
+  try {
+    await sendMessage(fullMessage, action || "chat");
+    addChatBubble("agent", "已发送给 Agent，等待指令回复...");
+  } catch (e) {
+    addChatBubble("agent", "发送失败: " + (e.message || e));
+  }
+}
+
+document.getElementById("chatSendBtn").addEventListener("click", () => {
+  chatSend(chatInputEl.value);
+  chatInputEl.value = "";
+});
+
+chatInputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.isComposing) {
+    e.preventDefault();
+    chatSend(chatInputEl.value);
+    chatInputEl.value = "";
+  }
+});
+
+// --- Scan Form (shared by both tab and chat quick action) ---
+
+async function doScanForm() {
+  try {
+    const formData = await scanCurrentForm();
+    const fieldSummary = formData.fields.map((f) => {
+      let desc = `- 「${f.label || "无标签"}」 类型=${f.type} 选择器="${f.selector}"`;
+      if (f.placeholder) desc += ` placeholder="${f.placeholder}"`;
+      if (f.required) desc += " [必填]";
+      if (f.options) desc += ` 选项=[${f.options.map((o) => o.text).join(", ")}]`;
+      if (f.currentValue) desc += ` 当前值="${f.currentValue}"`;
+      return desc;
+    }).join("\n");
+
+    const context = `[扫描表单] 页面: ${formData.pageTitle}\nURL: ${formData.pageUrl}\n\n表单字段:\n${fieldSummary}`;
+    const instruction = "请根据我的背景信息和页面上下文，生成合适的内容帮我填写这个表单。通过 ClawMe fill_form 指令回填，字段选择器已提供，直接用 selector 作为 fields 的 key。";
+
+    // Switch to chat tab and send
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.add("hidden"));
+    document.querySelector('[data-tab="chatTab"]').classList.add("active");
+    document.getElementById("chatTab").classList.remove("hidden");
+
+    await chatSend(instruction, context, "form_scan");
+    addLogEntry("form_scan", "ok", `扫描 ${formData.fields.length} 个字段，已发给 Agent`);
+  } catch (e) {
+    showStatus("扫描失败: " + (e.message || e));
+    addLogEntry("form_scan", "failed", e.message || String(e));
+  }
+}
+
+async function doScanPage() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) throw new Error("无法获取当前标签页");
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const title = document.title;
+        const meta = document.querySelector('meta[name="description"]')?.content || "";
+        const h1 = document.querySelector("h1")?.textContent?.trim() || "";
+        const text = document.body?.innerText?.slice(0, 2000) || "";
+        return { title, meta, h1, text };
+      },
+    });
+    const page = results?.[0]?.result;
+    const context = `[扫描页面] ${tab.title}\nURL: ${tab.url}\n\n标题: ${page.h1}\n描述: ${page.meta}\n\n页面内容摘要:\n${page.text.slice(0, 1000)}`;
+
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.add("hidden"));
+    document.querySelector('[data-tab="chatTab"]').classList.add("active");
+    document.getElementById("chatTab").classList.remove("hidden");
+
+    chatInputEl.focus();
+    addChatBubble("user", "（已扫描当前页面）", context);
+    addChatBubble("agent", "已读取页面内容，你想让我做什么？");
+  } catch (e) {
+    showStatus("扫描失败: " + (e.message || e));
+  }
+}
+
+// Scan button in instructions header
+document.getElementById("scanFormBtn").addEventListener("click", doScanForm);
+
+// Quick action chips in chat
+document.querySelectorAll(".qa-chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    const qa = chip.dataset.qa;
+    if (qa === "scan_form") { doScanForm(); return; }
+    if (qa === "scan_page") { doScanPage(); return; }
+    const prompts = {
+      tweet: "帮我写一条推文发到 Twitter，主题是：",
+      email: "帮我写一封邮件，收件人和主题是：",
+      remind: "帮我设置一个提醒：",
+    };
+    chatInputEl.value = prompts[qa] || "";
+    chatInputEl.focus();
+  });
+});
+
 // --- Init ---
 
 document.getElementById("saveConfig").addEventListener("click", () => {
@@ -376,7 +529,6 @@ document.getElementById("saveConfig").addEventListener("click", () => {
 });
 
 document.getElementById("refreshBtn").addEventListener("click", () => {
-  // Trigger poll via service worker
   chrome.runtime.sendMessage({ type: "poll-now" }, (result) => {
     if (result?.error) {
       listEl.innerHTML = `<div class="error">拉取失败: ${escapeHtml(result.error)}</div>`;
@@ -389,38 +541,7 @@ document.getElementById("refreshBtn").addEventListener("click", () => {
 
 document.getElementById("clearLog").addEventListener("click", clearLog);
 
-// --- Scan Form: extract → send to Agent → Agent returns fill_form ---
-document.getElementById("scanFormBtn").addEventListener("click", async () => {
-  const btn = document.getElementById("scanFormBtn");
-  const origText = btn.textContent;
-  btn.textContent = "⏳";
-  btn.disabled = true;
-
-  try {
-    const formData = await scanCurrentForm();
-    const fieldSummary = formData.fields.map((f) => {
-      let desc = `- 「${f.label || "无标签"}」 类型=${f.type} 选择器="${f.selector}"`;
-      if (f.placeholder) desc += ` placeholder="${f.placeholder}"`;
-      if (f.required) desc += " [必填]";
-      if (f.options) desc += ` 选项=[${f.options.map((o) => o.text).join(", ")}]`;
-      if (f.currentValue) desc += ` 当前值="${f.currentValue}"`;
-      return desc;
-    }).join("\n");
-
-    const message = `[form_scan] 用户请求帮填表单\n\n页面: ${formData.pageTitle}\nURL: ${formData.pageUrl}\n\n表单字段:\n${fieldSummary}\n\n请根据上下文生成合适的内容，通过 ClawMe fill_form 指令回填。字段选择器已提供，直接用 selector 作为 fields 的 key。`;
-
-    await sendMessage(message, "form_scan");
-    showStatus("已发送给 Agent，等待回填指令...");
-    addLogEntry("form_scan", "ok", `扫描 ${formData.fields.length} 个字段，已发给 Agent`);
-  } catch (e) {
-    showStatus("扫描失败: " + (e.message || e));
-    addLogEntry("form_scan", "failed", e.message || String(e));
-  } finally {
-    btn.textContent = origText;
-    btn.disabled = false;
-  }
-});
-
 // Load config and do initial fetch
 loadConfig().then(() => refresh());
 renderLog();
+renderChat();
