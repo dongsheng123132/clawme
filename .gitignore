@@ -2,3 +2,4 @@ node_modules/
 dist/
 https:/
 .DS_Store
+skills/clawdchat/credentials.json
