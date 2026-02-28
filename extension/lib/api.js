@@ -23,3 +23,18 @@ export async function reportResult(instructionId, status, result) {
     body: JSON.stringify({ instruction_id: instructionId, status, result }),
   });
 }
+
+/**
+ * Send a message to the backend, which relays it to OpenClaw.
+ * OpenClaw processes it with its AI and responds with clawme_send instructions.
+ */
+export async function sendMessage(text, action) {
+  const { baseUrl, token } = await getConfig();
+  const res = await fetch(`${baseUrl}/v1/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-ClawMe-Token": token },
+    body: JSON.stringify({ text, action }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

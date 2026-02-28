@@ -2,7 +2,6 @@ import express from "express";
 import { getTokenFromRequest, isTokenAllowed } from "./auth.js";
 import { addInstruction, getPendingForTarget, getById, setResult } from "./store.js";
 import { relayResultToOpenClaw, relayMessageToOpenClaw } from "./relay.js";
-import { isAIEnabled, processWithAI } from "./ai.js";
 import type { InstructionRequest, ResultRequest, UserMessage } from "./types.js";
 
 const app = express();
@@ -17,7 +16,7 @@ app.use((_req, res, next) => {
 
 const PORT = Number(process.env.PORT) || 31871;
 
-/** POST /v1/instructions — Agent 下发指令 */
+/** POST /v1/instructions — Agent / OpenClaw 下发指令 */
 app.post("/v1/instructions", (req, res) => {
   const token = getTokenFromRequest(req);
   if (!isTokenAllowed(token)) {
@@ -52,7 +51,7 @@ app.get("/v1/instructions/pending", (req, res) => {
   res.json({ instructions: list });
 });
 
-/** POST /v1/instructions/:id/result — 客户端上报执行结果（id 也可在 body.instruction_id） */
+/** POST /v1/instructions/:id/result — 客户端上报执行结果 */
 app.post("/v1/instructions/:id/result", (req, res) => {
   const token = getTokenFromRequest(req);
   if (!isTokenAllowed(token)) {
@@ -77,7 +76,7 @@ app.post("/v1/instructions/:id/result", (req, res) => {
   res.json({ id, status: inst.status });
 });
 
-/** POST /v1/messages — 用户/PWA 发消息给 Agent */
+/** POST /v1/messages — 浏览器插件 Chat 发消息，转发给 OpenClaw */
 app.post("/v1/messages", async (req, res) => {
   const token = getTokenFromRequest(req);
   if (!isTokenAllowed(token)) {
@@ -90,39 +89,18 @@ app.post("/v1/messages", async (req, res) => {
   const prefix = body.action ? `[${body.action}] ` : "";
   const message = `${prefix}${body.text}`;
 
-  // Try built-in AI first, fallback to OpenClaw relay
-  if (isAIEnabled()) {
-    try {
-      const result = await processWithAI(token!, message, body.action);
-      if (result.ok) {
-        return res.status(201).json({
-          ok: true,
-          message: "AI 已生成指令",
-          instruction: result.instruction,
-        });
-      } else {
-        return res.status(200).json({
-          ok: false,
-          message: result.error || "AI 处理失败",
-        });
-      }
-    } catch (e: any) {
-      console.error("[ai] processWithAI error:", e);
-      return res.status(500).json({ ok: false, message: "AI 处理异常: " + (e.message || e) });
-    }
-  } else {
-    relayMessageToOpenClaw(message).catch(() => {});
-    res.status(201).json({ ok: true, message: "已发送给 Agent" });
-  }
+  // Relay to OpenClaw — OpenClaw's AI processes and sends back clawme_send instructions
+  relayMessageToOpenClaw(message).catch(() => {});
+  res.status(201).json({ ok: true, message: "已发送给 Agent" });
 });
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.listen(PORT, () => {
   console.log(`ClawMe backend http://127.0.0.1:${PORT}`);
-  if (isAIEnabled()) {
-    console.log(`  AI mode: ON (model: ${process.env.CLAWME_AI_MODEL || "deepseek-chat"})`);
+  if (process.env.OPENCLAW_HOOK_URL) {
+    console.log(`  OpenClaw relay: ${process.env.OPENCLAW_HOOK_URL}`);
   } else {
-    console.log(`  AI mode: OFF (set CLAWME_AI_API_KEY to enable)`);
+    console.log(`  OpenClaw relay: OFF (set OPENCLAW_HOOK_URL to enable)`);
   }
 });

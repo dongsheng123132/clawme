@@ -1,6 +1,5 @@
 import { DEFAULT_BASE, TYPE_LABELS, LOG_MAX_ENTRIES } from "../lib/constants.js";
-import { fetchPending, reportResult } from "../lib/api.js";
-import { callAI } from "../lib/ai.js";
+import { fetchPending, reportResult, sendMessage } from "../lib/api.js";
 import { renderPayload, executeInstruction, replayInstruction } from "../lib/executor.js";
 import { groupByWorkflow, WorkflowRunner } from "../lib/workflow.js";
 import { scanCurrentForm } from "../lib/instructions/scan-form.js";
@@ -11,7 +10,6 @@ const logListEl = document.getElementById("logList");
 const logCountEl = document.getElementById("logCount");
 const baseUrlEl = document.getElementById("baseUrl");
 const tokenEl = document.getElementById("token");
-const aiApiKeyEl = document.getElementById("aiApiKey");
 const autoPollEl = document.getElementById("autoPoll");
 const autoExecuteEl = document.getElementById("autoExecute");
 
@@ -26,13 +24,11 @@ async function loadConfig() {
   const r = await chrome.storage.local.get({
     baseUrl: DEFAULT_BASE,
     token: "",
-    aiApiKey: "",
     autoPoll: true,
     autoExecute: false,
   });
   baseUrlEl.value = r.baseUrl;
   tokenEl.value = r.token;
-  aiApiKeyEl.value = r.aiApiKey;
   autoPollEl.checked = r.autoPoll;
   autoExecuteEl.checked = r.autoExecute;
 }
@@ -40,10 +36,9 @@ async function loadConfig() {
 function saveConfig() {
   const baseUrl = baseUrlEl.value.trim() || DEFAULT_BASE;
   const token = tokenEl.value.trim();
-  const aiApiKey = aiApiKeyEl.value.trim();
   const autoPoll = autoPollEl.checked;
   const autoExecute = autoExecuteEl.checked;
-  chrome.storage.local.set({ baseUrl, token, aiApiKey, autoPoll, autoExecute });
+  chrome.storage.local.set({ baseUrl, token, autoPoll, autoExecute });
 
   // Notify service worker about auto-poll change
   chrome.runtime.sendMessage({ type: "set-auto-poll", enabled: autoPoll }).catch(() => {});
@@ -206,40 +201,21 @@ async function executeSingle(instId) {
   if (!inst) return;
 
   const type = inst.instruction.type;
-  const isLocal = String(instId).startsWith("ai-");
   addLogEntry(type, "running", "执行中...", inst);
 
-  let outcome;
-  if (isLocal) {
-    // Local AI-generated instruction — execute only, no backend report
-    outcome = await replayInstruction(inst);
-    // Remove from local list
-    currentInstructions = currentInstructions.filter((i) => i.id !== instId);
-    renderInstructions();
-  } else {
-    outcome = await executeInstruction(inst);
-    refresh();
-  }
-
+  const outcome = await executeInstruction(inst);
   executionLog[0].status = outcome.status;
   executionLog[0].result = outcome.result;
   renderLog();
+  refresh();
 }
 
 async function skipSingle(instId) {
   const inst = currentInstructions.find((i) => i.id === instId);
   if (!inst) return;
-  const isLocal = String(instId).startsWith("ai-");
-  if (!isLocal) {
-    await reportResult(instId, "cancelled", "用户跳过");
-  }
+  await reportResult(instId, "cancelled", "用户跳过");
   addLogEntry(inst.instruction.type, "cancelled", "用户跳过");
-  if (isLocal) {
-    currentInstructions = currentInstructions.filter((i) => i.id !== instId);
-    renderInstructions();
-  } else {
-    refresh();
-  }
+  refresh();
 }
 
 async function runWorkflow(wfId) {
@@ -442,42 +418,14 @@ async function chatSend(text, context, action) {
 
   const fullMessage = context ? `${context}\n\n${text}` : text;
   try {
-    addChatBubble("agent", "AI 处理中...");
-    renderChat();
+    const result = await sendMessage(fullMessage, action || "chat");
+    addChatBubble("agent", "已发送给 Agent，等待指令回复...\n切到「指令」tab 查看");
 
-    const result = await callAI(fullMessage);
-
-    // Remove the "processing" bubble
-    chatHistory.pop();
-
-    if (result.ok && result.instruction) {
-      const type = result.instruction.type;
-      const label = TYPE_LABELS[type] || type;
-      const payloadPreview = JSON.stringify(result.instruction.payload || {}, null, 2);
-      const preview = payloadPreview.length > 300 ? payloadPreview.slice(0, 300) + "..." : payloadPreview;
-      addChatBubble("agent", `已生成 [${label}] 指令\n\n${preview}`);
-
-      // Inject as a local pending instruction (no backend needed)
-      const fakeInst = {
-        id: "ai-" + Date.now(),
-        instruction: result.instruction,
-        meta: { from: "local-ai", auto_generated: true },
-      };
-      currentInstructions.push(fakeInst);
-      renderInstructions();
-
-      // Switch to instructions tab
-      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-      document.querySelectorAll(".tab-panel").forEach((p) => p.classList.add("hidden"));
-      document.querySelector('[data-tab="instrTab"]').classList.add("active");
-      document.getElementById("instrTab").classList.remove("hidden");
-    } else {
-      addChatBubble("agent", result.error || "AI 处理失败");
-    }
+    // Auto-refresh to pick up any instructions the Agent generates
+    setTimeout(() => refresh(), 2000);
+    setTimeout(() => refresh(), 5000);
+    setTimeout(() => refresh(), 10000);
   } catch (e) {
-    if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].text === "AI 处理中...") {
-      chatHistory.pop();
-    }
     addChatBubble("agent", "发送失败: " + (e.message || e));
   }
 }
