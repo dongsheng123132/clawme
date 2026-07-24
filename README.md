@@ -2,11 +2,11 @@
   <img src="web/icons/logo.svg" width="120" alt="ClawMe Logo">
 </p>
 
-<h1 align="center">ClawMe / 虾me</h1>
+<h1 align="center">ClawMe / 虾秘</h1>
 
 <p align="center">
-  <b>AI Agent 与「人」之间的桥梁 — 管家角色</b><br>
-  <i>The butler between AI Agents and you — executes for you, doesn't decide for you</i>
+  <b>跨模型、跨 Agent 的 AI 值班台</b><br>
+  <i>AI 干活，需要你时才叫你。</i>
 </p>
 
 <p align="center">
@@ -27,6 +27,10 @@
 
 > **产品升级方向（v0.3）**：ClawMe 将升级为跨模型、跨 Agent、以手机为主要交互端的 **AI 值班台**。
 > 完整产品与技术方案见 [docs/clawme-ai-duty-desk-v0.3.md](docs/clawme-ai-duty-desk-v0.3.md)。
+>
+> **当前可运行链路**：Codex 官方 `app-server` → 本地 ClawMe Agent → 持久化 Relay →
+> 手机 PWA 查看任务、允许/拒绝授权、补充指令。开发运行见
+> [docs/v0.3-developer-quickstart.md](docs/v0.3-developer-quickstart.md)。
 
 ---
 
@@ -96,6 +100,7 @@ ClawMe：传的是**可执行指令**，在设备上真实执行。
 | 目录 | 说明 |
 |------|------|
 | [backend/](backend/) | Node.js 后端：接收指令、轮询下发、结果上报、回传 OpenClaw |
+| [agent/](agent/) | 电脑端 ClawMe Agent：Codex 原生协议、任务事件、手机授权回传 |
 | [extension/](extension/) | Chrome 浏览器插件（v0.2.0）：侧边栏、自动轮询、7 种指令、Workflow |
 | [web/](web/) | clawme.net 官网 + PWA 手机 App（双语、对话、扫码连接） |
 | [openclaw-clawme/](openclaw-clawme/) | OpenClaw 插件：注册 `clawme_send` Tool |

@@ -1,147 +1,95 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>ClawMe</title>
-  <meta name="theme-color" content="#FF6B35">
+  <title>ClawMe 值班台</title>
+  <meta name="theme-color" content="#0f172a">
   <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.svg">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/duty.css">
 </head>
 <body>
-  <div id="app">
-    <!-- Connect screen -->
-    <div id="connectScreen" class="screen">
-      <div class="connect-hero">
-        <img src="/icons/icon-192.svg" alt="ClawMe" class="app-logo">
-        <h1>ClawMe</h1>
-        <p>连接你的 Agent</p>
+  <section id="connect" class="connect">
+    <div class="brand-mark">CM</div>
+    <p class="eyebrow">AI DUTY DESK</p>
+    <h1>AI 干活，需要你时才叫你。</h1>
+    <p class="lead">连接你的 ClawMe Agent，随时查看任务、处理授权并继续对话。</p>
+    <form id="connectForm" class="connect-card">
+      <label for="baseUrl">Relay 地址</label>
+      <input id="baseUrl" type="url" value="https://api.clawme.net" required>
+      <label for="token">配对 Token</label>
+      <input id="token" type="password" autocomplete="current-password" required>
+      <button type="submit" class="button primary">进入值班台</button>
+      <p id="connectError" class="error"></p>
+    </form>
+  </section>
+
+  <div id="desk" class="desk hidden">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">CLAWME</p>
+        <h1>AI 值班台</h1>
       </div>
-      <div class="connect-form">
-        <label>Backend URL</label>
-        <input id="inputUrl" type="url" placeholder="https://clawme.net" autocomplete="url">
-        <label>Token</label>
-        <input id="inputToken" type="password" placeholder="你的 Token">
-        <button id="btnConnect" class="btn-primary">连接</button>
-        <div class="divider"><span>或</span></div>
-        <button id="btnScan" class="btn-secondary">扫码连接</button>
+      <div class="top-actions">
+        <span id="connection" class="connection">连接中</span>
+        <button id="settings" class="icon-button" aria-label="连接设置">⋯</button>
       </div>
-      <div id="connectError" class="error-msg"></div>
-    </div>
+    </header>
 
-    <!-- Scan screen -->
-    <div id="scanScreen" class="screen hidden">
-      <div class="scan-header">
-        <button id="btnBackFromScan" class="back-btn">&larr;</button>
-        <h2>扫描二维码</h2>
-      </div>
-      <div id="scanArea" class="scan-area">
-        <video id="scanVideo" playsinline></video>
-        <div class="scan-overlay"></div>
-      </div>
-      <p class="scan-hint">将二维码放入框内自动识别</p>
-    </div>
+    <main>
+      <section id="dutyPanel" class="panel">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">NEEDS YOU</p>
+            <h2>等你处理</h2>
+          </div>
+          <span id="attentionCount" class="count">0</span>
+        </div>
+        <div id="attentionList" class="stack"></div>
 
-    <!-- Main screen -->
-    <div id="mainScreen" class="screen hidden">
-      <!-- Header -->
-      <header class="app-header">
-        <div class="header-left">
-          <img src="/icons/icon-192.svg" alt="" class="header-logo">
-          <span class="header-title">ClawMe</span>
+        <div class="section-title tasks-title">
+          <div>
+            <p class="eyebrow">LIVE TASKS</p>
+            <h2>任务动态</h2>
+          </div>
+          <button id="refresh" class="text-button">刷新</button>
         </div>
-        <div class="header-right">
-          <span id="statusDot" class="status-dot connected"></span>
-          <button id="btnSettings" class="icon-btn">&#x2699;</button>
-        </div>
-      </header>
+        <div id="taskList" class="stack"></div>
+      </section>
 
-      <!-- Tab: Instructions -->
-      <main id="tabInstr" class="main-content tab-content">
-        <div class="section-bar">
-          <h2>待执行指令</h2>
-          <button id="btnRefresh" class="icon-btn">&#x21BB;</button>
-        </div>
-        <div id="instrList" class="instr-list">
-          <div class="empty-state">暂无指令，等待 Agent 下发...</div>
-        </div>
-        <details class="log-section">
-          <summary>执行日志 <span id="logBadge" class="badge">0</span></summary>
-          <div id="logList" class="log-list"></div>
-        </details>
-      </main>
-
-      <!-- Tab: Chat with Agent -->
-      <main id="tabChat" class="main-content tab-content hidden">
-        <!-- Quick actions -->
-        <div class="quick-actions">
-          <button class="qa-btn" data-action="tweet">&#x1F426; 帮我发推</button>
-          <button class="qa-btn" data-action="email">&#x2709; 帮我写邮件</button>
-          <button class="qa-btn" data-action="remind">&#x23F0; 设置提醒</button>
-          <button class="qa-btn" data-action="search">&#x1F50D; 帮我搜索</button>
-        </div>
-
-        <!-- Chat messages -->
-        <div id="chatMessages" class="chat-messages">
-          <div class="chat-welcome">
-            <p>向你的 AI Agent 发消息</p>
-            <p class="hint">Agent 收到后会通过指令回复你</p>
+      <section id="machinesPanel" class="panel hidden">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">COMPUTERS</p>
+            <h2>我的电脑</h2>
           </div>
         </div>
+        <div id="machineList" class="stack"></div>
+      </section>
+    </main>
 
-        <!-- Chat input -->
-        <div class="chat-input-bar">
-          <input id="chatInput" type="text" placeholder="给 Agent 发消息..." autocomplete="off">
-          <button id="btnSend" class="btn-send">发送</button>
-        </div>
-      </main>
+    <nav class="tabs">
+      <button class="tab active" data-panel="dutyPanel"><span>◉</span>值班</button>
+      <button class="tab" data-panel="machinesPanel"><span>▣</span>设备</button>
+    </nav>
 
-      <!-- Bottom tab bar -->
-      <nav class="tab-bar">
-        <button class="tab-item active" data-tab="tabInstr">
-          <span class="tab-icon">&#x1F4CB;</span>
-          <span class="tab-label">指令</span>
-        </button>
-        <button class="tab-item" data-tab="tabChat">
-          <span class="tab-icon">&#x1F4AC;</span>
-          <span class="tab-label">对话</span>
-        </button>
-      </nav>
-
-      <!-- Settings panel -->
-      <div id="settingsPanel" class="settings-panel hidden">
-        <div class="settings-header">
-          <h2>设置</h2>
-          <button id="btnCloseSettings" class="icon-btn">&times;</button>
-        </div>
-        <div class="settings-body">
-          <label>Backend URL</label>
-          <input id="settingUrl" type="url" readonly>
-          <label>Token</label>
-          <input id="settingToken" type="password" readonly>
-          <div class="toggle-row">
-            <span>自动轮询（30秒）</span>
-            <label class="switch"><input type="checkbox" id="togglePoll" checked><span class="slider"></span></label>
-          </div>
-          <div class="toggle-row">
-            <span>自动执行</span>
-            <label class="switch"><input type="checkbox" id="toggleAutoExec"><span class="slider"></span></label>
-          </div>
-          <div class="qr-section">
-            <h3>连接二维码</h3>
-            <p class="hint">其他设备扫此码可连接同一 Backend</p>
-            <div id="qrCode" class="qr-display"></div>
-          </div>
-          <button id="btnDisconnect" class="btn-danger">断开连接</button>
-        </div>
-      </div>
-    </div>
+    <dialog id="taskDialog">
+      <button id="closeTask" class="dialog-close" aria-label="关闭">×</button>
+      <p id="taskProvider" class="eyebrow"></p>
+      <h2 id="taskTitle"></h2>
+      <p id="taskSummary" class="dialog-summary"></p>
+      <div id="eventList" class="timeline"></div>
+      <form id="messageForm" class="message-form">
+        <input id="messageText" placeholder="补充指令给 AI…" autocomplete="off">
+        <button class="button primary" type="submit">发送</button>
+      </form>
+    </dialog>
   </div>
 
-  <script type="module" src="/js/app.js"></script>
+  <script type="module" src="/js/duty.js"></script>
 </body>
 </html>

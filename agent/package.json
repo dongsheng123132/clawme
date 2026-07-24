@@ -1,0 +1,14 @@
+{
+  "name": "clawme-agent",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "ClawMe local agent with native Codex app-server integration",
+  "scripts": {
+    "start": "node src/cli.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
