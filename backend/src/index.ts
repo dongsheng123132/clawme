@@ -3,6 +3,8 @@ import { getTokenFromRequest, isTokenAllowed } from "./auth.js";
 import { addInstruction, getPendingForTarget, getById, setResult, addMessage, getPendingMessages, markMessageRelayed } from "./store.js";
 import { relayResultToOpenClaw, relayMessageToOpenClaw } from "./relay.js";
 import type { InstructionRequest, ResultRequest, UserMessage } from "./types.js";
+import { installV3Routes } from "./v3-routes.js";
+import { V3Store } from "./v3-store.js";
 
 const app = express();
 app.use(express.json());
@@ -15,6 +17,9 @@ app.use((_req, res, next) => {
 });
 
 const PORT = Number(process.env.PORT) || 31871;
+const v3Store = new V3Store();
+await v3Store.load();
+installV3Routes(app, v3Store);
 
 /** POST /v1/instructions — Agent / OpenClaw 下发指令 */
 app.post("/v1/instructions", (req, res) => {
@@ -131,3 +136,10 @@ app.listen(PORT, () => {
     console.log(`  OpenClaw relay: OFF (set OPENCLAW_HOOK_URL to enable)`);
   }
 });
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, async () => {
+    await v3Store.flush();
+    process.exit(0);
+  });
+}
