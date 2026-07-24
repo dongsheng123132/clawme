@@ -1,45 +1,41 @@
 # ClawMe 产品路线图
 
-## 阶段一：协议与 iOS 核心（MVP）
+> 本文件是快速索引。v0.3 的产品、架构、安全、数据模型和完整实施方案以
+> [《ClawMe｜AI 值班台 v0.3 产品与技术方案》](clawme-ai-duty-desk-v0.3.md) 为唯一真相源。
 
-**目标**：跑通「Agent 发指令 → iOS 原生执行」，验证协议与授权。
+## 当前定位
 
-- **定稿指令协议**：见 `instruction-protocol.md`。
-- **iOS 原生 App (Swift)**：
-  - **核心能力**：集成 OpenClaw Agent，支持 WebSocket/Push 接收指令。
-  - **Shortcuts 集成**：通过 App Intents 暴露核心能力给快捷指令。
-  - **基础 UI**：SwiftUI 仪表盘。
-- **通道**：自建最小后端（或 Serverless） + APNs（苹果推送）。
-- **产出**：可安装的 TestFlight 包，支持 `open_url` 和 `trigger_shortcut` 指令。
+ClawMe 不再以“手机执行 Agent 指令”或“加强版通知工具”为核心，而是：
 
-## 阶段二：语音与高级体验
+> **跨模型、跨 Agent、以手机为主要交互端的 AI 远程值班台。**
 
-- **语音唤醒 (Siri)**：支持 "Hey Siri, Ask ClawMe to..." 交互。
-- **浏览器端**：补齐浏览器插件，形成「手机 + 浏览器」双端闭环。
-- **执行结果回传**：指令执行结果（成功/失败/返回值）实时回传 Agent。
-- **Widget**: 桌面小组件展示系统状态。
+首版解决：
 
-## 阶段三：开放与扩展
+1. 任务完成通知；
+2. 等待输入；
+3. 手机允许一次/拒绝；
+4. 执行失败；
+5. 模型限速和额度不足；
+6. 选择等待、换模型或暂停；
+7. 给原任务补充指令并继续。
 
-- **多 Agent 绑定**：同一用户可选多个 Agent。
-- **指令模板与条件触发**。
-- **文档与示例**：面向 OpenClaw / 自建 Agent 的接入指南。
+## 实施顺序
 
----
+| 阶段 | 目标 |
+|---|---|
+| 0 | 统一 Task/Event/Decision 协议与设备安全 |
+| 1 | Windows ClawMe Agent、SQLite、可靠事件 |
+| 2 | Codex 原生任务与手机授权闭环 |
+| 3 | Claude Code、OpenClaw、Hermes Adapter |
+| 4 | UURouter 模型异常识别与检查点恢复 |
+| 5 | U-Claw 安装、PWA 发布、线上灰度 |
 
-## 优先级建议
+## 当前非目标
 
-| 优先级 | 内容 | 说明 |
-|--------|------|------|
-| P0 | iOS 原生 App 框架 | Swift + SwiftUI 搭建 |
-| P0 | 指令协议 + APNs | 解决后台唤醒问题 |
-| P1 | Siri Intents | 实现语音控制 |
-| P1 | 浏览器插件 | 桌面端覆盖 |
+- 自研远程桌面和视频流；
+- 原生 iOS/Android App；
+- 完整 Web IDE、Git 和手机文件编辑器；
+- 企业团队协作；
+- 自动批准高风险操作。
 
----
-
-## 依赖与风险
-
-- **iOS 限制**：后台保活难，需重度依赖 **APNs (Push Notifications)** 和 **Shortcuts**。
-- **Voice Wake**：纯后台监听不可行，必须走 **Siri Integration** 或 **Foreground Mode**。
-- **审核**：App Store 对“远程执行代码”敏感，需确保指令集在本地解析，不直接 `eval`。
+旧 iOS/Shortcuts 路线保留为未来设备执行能力，但不再作为 MVP 的第一优先级。

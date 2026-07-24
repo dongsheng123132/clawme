@@ -25,6 +25,9 @@
 
 本项目采用 [AGPL-3.0](LICENSE) 开源协议。
 
+> **产品升级方向（v0.3）**：ClawMe 将升级为跨模型、跨 Agent、以手机为主要交互端的 **AI 值班台**。
+> 完整产品与技术方案见 [docs/clawme-ai-duty-desk-v0.3.md](docs/clawme-ai-duty-desk-v0.3.md)。
+
 ---
 
 ## 1. 产品定位
