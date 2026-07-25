@@ -39,6 +39,7 @@ export interface DutyTask {
 export interface TaskEvent {
   id: string;
   taskId: string;
+  sequence: number;
   type: string;
   message?: string;
   data?: Record<string, unknown>;
@@ -84,6 +85,7 @@ export interface V3Snapshot {
   machines: Machine[];
   tasks: DutyTask[];
   events: TaskEvent[];
+  eventHeads: Record<string, number>;
   attention: AttentionRequest[];
   commands: AgentCommand[];
 }

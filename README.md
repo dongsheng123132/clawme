@@ -31,6 +31,10 @@
 > **当前可运行链路**：Codex 官方 `app-server` → 本地 ClawMe Agent → 持久化 Relay →
 > 手机 PWA 查看任务、允许/拒绝授权、补充指令。开发运行见
 > [docs/v0.3-developer-quickstart.md](docs/v0.3-developer-quickstart.md)。
+>
+> **跨端底层（实验）**：任务快照 + 游标差量已接入 Relay 与 iOS Codable 模型；
+> 各端保留原生界面，只同步 Action/State/Event。见
+> [One Core, Many Shadows](docs/actionparity-shadow-sync.md)。
 
 ---
 
@@ -152,6 +156,7 @@ ssh root@your-server 'bash -s' < deploy/setup.sh
 - **浏览器工具**：[docs/browser-tool-guide.md](docs/browser-tool-guide.md) — 使用场景与示例
 - **OpenClaw 接入**：[docs/openclaw-setup.md](docs/openclaw-setup.md) — 安装、配置、排查
 - **路线图**：[docs/roadmap.md](docs/roadmap.md) — 浏览器/手机优先级与未来规划
+- **跨端差量同步**：[docs/actionparity-shadow-sync.md](docs/actionparity-shadow-sync.md) — Windows/macOS/iOS/鸿蒙共用任务语义
 - **命名**：[docs/naming-rationale.md](docs/naming-rationale.md) — ClawMe / 虾me 品牌考量
 
 ---

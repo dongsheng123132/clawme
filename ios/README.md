@@ -19,11 +19,20 @@ Since there is no `.xcodeproj` file (binary), you need to create a new project i
 
 *   **App Entry**: `ClawMeApp.swift`
 *   **UI**: `Views/ContentView.swift` (Main Dashboard)
-*   **Services**: `Services/ConnectionManager.swift` (Handles WebSocket/Push)
+*   **Services**: `Services/ConnectionManager.swift` (Handles cursor-based snapshot/delta sync; WebSocket/Push can wake it later)
 *   **Models**: `Models/Instruction.swift` (Parses JSON commands)
+*   **Sync Model**: `Models/SyncEnvelope.swift` (ActionParity snapshot/delta contract shared with the relay)
 
 ## Features (Planned)
 
 *   [ ] **Voice Mode**: "Hey Siri, Ask ClawMe..."
 *   [ ] **Shortcuts**: App Intents provider
 *   [ ] **Push Notifications**: APNs integration
+
+## Native Shadow Sync
+
+The current vertical slice does not stream the Windows screen. Call
+`ConnectionManager.syncTask(taskID:baseURL:token:)` to receive an initial task
+snapshot and then only events after the saved opaque cursor. The iOS UI remains
+fully native while sharing task semantics with Windows, macOS, web, and future
+HarmonyOS clients.

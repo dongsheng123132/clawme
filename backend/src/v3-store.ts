@@ -10,11 +10,18 @@ import type {
   TaskStatus,
   V3Snapshot,
 } from "./v3-types.js";
+import {
+  SyncCursorError,
+  syncSequence,
+  taskDeltaEnvelope,
+  taskSnapshotEnvelope,
+} from "./sync.js";
 
 const EMPTY: V3Snapshot = {
   machines: [],
   tasks: [],
   events: [],
+  eventHeads: {},
   attention: [],
   commands: [],
 };
@@ -28,10 +35,26 @@ export class V3Store {
   async load(): Promise<void> {
     try {
       const parsed = JSON.parse(await readFile(this.filePath, "utf8")) as Partial<V3Snapshot>;
+      const derivedHeads: Record<string, number> = {};
+      const events = (parsed.events ?? []).map((event) => {
+        const previous = derivedHeads[event.taskId] ?? 0;
+        const sequence = Number.isSafeInteger(event.sequence) && event.sequence > 0
+          ? event.sequence
+          : previous + 1;
+        derivedHeads[event.taskId] = Math.max(previous, sequence);
+        return { ...event, sequence };
+      });
+      const eventHeads = { ...derivedHeads };
+      for (const [taskId, head] of Object.entries(parsed.eventHeads ?? {})) {
+        if (Number.isSafeInteger(head) && head >= 0) {
+          eventHeads[taskId] = Math.max(eventHeads[taskId] ?? 0, head);
+        }
+      }
       this.data = {
         machines: parsed.machines ?? [],
         tasks: parsed.tasks ?? [],
-        events: parsed.events ?? [],
+        events,
+        eventHeads,
         attention: parsed.attention ?? [],
         commands: parsed.commands ?? [],
       };
@@ -72,13 +95,37 @@ export class V3Store {
     const now = new Date().toISOString();
     const existing = this.data.tasks.find((item) => item.id === input.id);
     if (existing) {
+      const changed =
+        existing.status !== input.status
+        || existing.summary !== input.summary
+        || existing.nativeThreadId !== input.nativeThreadId
+        || existing.nativeTurnId !== input.nativeTurnId;
       Object.assign(existing, input, { updatedAt: now });
-      this.persist();
+      if (changed) {
+        this.addEvent(existing.id, {
+          type: "task.updated",
+          data: {
+            status: existing.status,
+            summary: existing.summary,
+          },
+          status: existing.status,
+        });
+      } else {
+        this.persist();
+      }
       return existing;
     }
     const task: DutyTask = { ...input, createdAt: input.createdAt ?? now, updatedAt: now };
     this.data.tasks.push(task);
-    this.persist();
+    this.addEvent(task.id, {
+      type: "task.created",
+      data: {
+        provider: task.provider,
+        title: task.title,
+        status: task.status,
+      },
+      status: task.status,
+    });
     return task;
   }
 
@@ -92,15 +139,22 @@ export class V3Store {
     return this.data.tasks.find((item) => item.id === id);
   }
 
-  addEvent(taskId: string, input: Omit<TaskEvent, "id" | "taskId" | "createdAt"> & { status?: TaskStatus }): TaskEvent {
+  addEvent(
+    taskId: string,
+    input: Omit<TaskEvent, "id" | "taskId" | "sequence" | "createdAt">
+      & { status?: TaskStatus },
+  ): TaskEvent {
+    const sequence = (this.data.eventHeads[taskId] ?? 0) + 1;
     const event: TaskEvent = {
       id: randomUUID(),
       taskId,
+      sequence,
       type: input.type,
       message: input.message,
       data: input.data,
       createdAt: new Date().toISOString(),
     };
+    this.data.eventHeads[taskId] = sequence;
     this.data.events.push(event);
     if (this.data.events.length > 5000) this.data.events = this.data.events.slice(-5000);
     const task = this.getTask(taskId);
@@ -114,7 +168,41 @@ export class V3Store {
   }
 
   listEvents(taskId: string): TaskEvent[] {
-    return this.data.events.filter((item) => item.taskId === taskId);
+    return this.data.events
+      .filter((item) => item.taskId === taskId)
+      .sort((a, b) => a.sequence - b.sequence);
+  }
+
+  syncTask(taskId: string, after?: string, limit = 100) {
+    const task = this.getTask(taskId);
+    if (!task) return undefined;
+    const head = this.data.eventHeads[taskId] ?? 0;
+    if (!after) {
+      return taskSnapshotEnvelope(
+        task,
+        this.data.attention.filter((item) => item.taskId === taskId && item.status === "pending"),
+        head,
+      );
+    }
+
+    const sequence = syncSequence(after, taskId);
+    if (sequence > head) {
+      throw new SyncCursorError("Cursor is ahead of the task event stream");
+    }
+    const retained = this.listEvents(taskId);
+    const earliest = retained[0]?.sequence ?? head + 1;
+    if (sequence < earliest - 1) {
+      return taskSnapshotEnvelope(
+        task,
+        this.data.attention.filter((item) => item.taskId === taskId && item.status === "pending"),
+        head,
+      );
+    }
+    const safeLimit = Math.max(1, Math.min(limit, 1000));
+    const events = retained
+      .filter((event) => event.sequence > sequence)
+      .slice(0, safeLimit);
+    return taskDeltaEnvelope(taskId, sequence, events, head);
   }
 
   addAttention(input: Omit<AttentionRequest, "id" | "status" | "createdAt"> & { id?: string }): AttentionRequest {
@@ -130,7 +218,17 @@ export class V3Store {
       task.status = "waiting";
       task.updatedAt = request.createdAt;
     }
-    this.persist();
+    this.addEvent(request.taskId, {
+      type: "attention.input_required",
+      status: "waiting",
+      data: {
+        attention_id: request.id,
+        kind: request.kind,
+        title: request.title,
+        risk: request.risk,
+        options: request.options,
+      },
+    });
     return request;
   }
 
@@ -160,7 +258,14 @@ export class V3Store {
         nativeMethod: request.nativeMethod,
       },
     });
-    this.persist();
+    this.addEvent(request.taskId, {
+      type: "attention.decided",
+      data: {
+        attention_id: request.id,
+        decision,
+        note,
+      },
+    });
     return request;
   }
 
@@ -171,7 +276,17 @@ export class V3Store {
       createdAt: new Date().toISOString(),
     };
     this.data.commands.push(command);
-    this.persist();
+    if (command.taskId) {
+      this.addEvent(command.taskId, {
+        type: "command.queued",
+        data: {
+          command_id: command.id,
+          command_type: command.type,
+        },
+      });
+    } else {
+      this.persist();
+    }
     return command;
   }
 
@@ -187,7 +302,17 @@ export class V3Store {
     );
     if (!command) return undefined;
     command.acknowledgedAt = new Date().toISOString();
-    this.persist();
+    if (command.taskId) {
+      this.addEvent(command.taskId, {
+        type: "command.acknowledged",
+        data: {
+          command_id: command.id,
+          command_type: command.type,
+        },
+      });
+    } else {
+      this.persist();
+    }
     return command;
   }
 }

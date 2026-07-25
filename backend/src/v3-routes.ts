@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { getTokenFromRequest, isTokenAllowed } from "./auth.js";
 import type { AttentionRequest, DutyTask, Machine, TaskStatus } from "./v3-types.js";
 import { V3Store } from "./v3-store.js";
+import { SyncCursorError } from "./sync.js";
 
 const TASK_STATUSES = new Set<TaskStatus>([
   "queued", "running", "waiting", "completed", "failed", "paused",
@@ -67,6 +68,28 @@ export function installV3Routes(app: Express, store: V3Store): void {
     const task = store.getTask(req.params.id);
     if (!task) return res.status(404).json({ error: "Task not found" });
     res.json({ task, events: store.listEvents(task.id) });
+  });
+
+  app.get("/v3/sync/tasks/:id", (req, res) => {
+    if (!authorized(req, res)) return;
+    const rawLimit = req.query.limit === undefined ? 100 : Number(req.query.limit);
+    if (!Number.isSafeInteger(rawLimit) || rawLimit < 1 || rawLimit > 1000) {
+      return res.status(400).json({ error: "limit must be an integer from 1 to 1000" });
+    }
+    try {
+      const envelope = store.syncTask(
+        req.params.id,
+        req.query.after ? String(req.query.after) : undefined,
+        rawLimit,
+      );
+      if (!envelope) return res.status(404).json({ error: "Task not found" });
+      res.json(envelope);
+    } catch (error) {
+      if (error instanceof SyncCursorError) {
+        return res.status(400).json({ error: error.code, message: error.message });
+      }
+      throw error;
+    }
   });
 
   app.post("/v3/tasks/:id/events", (req, res) => {

@@ -42,6 +42,14 @@ export class RelayClient {
     });
   }
 
+  syncTask(taskId, { after, limit = 100 } = {}) {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (after) query.set("after", after);
+    return this.request(
+      `/v3/sync/tasks/${encodeURIComponent(taskId)}?${query}`,
+    );
+  }
+
   addAttention(attention) {
     return this.request("/v3/attention", {
       method: "POST",

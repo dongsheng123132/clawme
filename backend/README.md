@@ -20,6 +20,7 @@ Relay 负责设备心跳、任务事件、待处理授权、手机决定和离�
 - `POST /v3/machines/heartbeat` — 电脑端上线与心跳
 - `POST /v3/tasks` / `GET /v3/tasks` — 创建、更新和查看任务
 - `POST /v3/tasks/:id/events` — 上报原生 Agent 事件
+- `GET /v3/sync/tasks/:id` — 首次快照；带 `after` 游标时只返回新增事件
 - `POST /v3/attention` / `GET /v3/attention` — 创建、查看待处理事项
 - `POST /v3/attention/:id/decision` — 手机允许、拒绝或选择操作
 - `GET /v3/agent/commands` — 本地 Agent 领取手机决定和补充指令
@@ -43,3 +44,17 @@ npm start
 ```
 
 开发时：`npm run dev`（需先 `npm run build` 一次）。验证：`npm test`。
+# ActionParity task sync
+
+Native clients can resume a task stream without downloading the complete relay
+store:
+
+```http
+GET /v3/sync/tasks/:taskId
+GET /v3/sync/tasks/:taskId?after=<opaque-cursor>&limit=100
+X-ClawMe-Token: <token>
+```
+
+The first request returns `sync.snapshot`; subsequent requests return
+`sync.delta` under `action-parity/sync@0.1`. See
+[`docs/actionparity-shadow-sync.md`](../docs/actionparity-shadow-sync.md).
