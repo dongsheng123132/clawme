@@ -66,32 +66,39 @@ if (command === "shadow") {
     taskId: process.env.CLAWME_UU_RESCUE_TASK_ID,
     cliPath,
   });
-  const owner = await bridge.status();
+  await bridge.status(); // discovers the current task when none was configured
   const ownerTaskId = bridge.taskId;
   const relayTaskId = process.env.CLAWME_RELAY_TASK_ID
     || `uu-rescue:${machineId}:${ownerTaskId}`;
 
-  await relay.heartbeat({
-    name: machineName,
-    platform: platform(),
-    agentVersion: "0.4.0",
-    capabilities: [
-      "shadowcore-owner",
-      "checkpoint.create",
-      "task-events",
-      "owner-challenge",
-    ],
-  });
-  await relay.upsertTask({
-    id: relayTaskId,
-    provider: "uu-rescue",
-    title: owner.title,
-    status: relayStatus(owner.state),
-    summary: owner.next_step,
-    metadata: { owner_task_id: ownerTaskId },
-  });
+  // Also used to recover after a relay restart, so it re-reads the live owner
+  // state rather than replaying whatever was true at agent startup.
+  async function register() {
+    const current = await bridge.status();
+    await relay.heartbeat({
+      name: machineName,
+      platform: platform(),
+      agentVersion: "0.4.0",
+      capabilities: [
+        "shadowcore-owner",
+        "checkpoint.create",
+        "task-events",
+        "owner-challenge",
+      ],
+    });
+    await relay.upsertTask({
+      id: relayTaskId,
+      provider: "uu-rescue",
+      title: current.title,
+      status: relayStatus(current.state),
+      summary: current.next_step,
+      metadata: { owner_task_id: ownerTaskId },
+    });
+  }
 
-  const worker = new ShadowWorker({ relay, bridge, relayTaskId });
+  await register();
+
+  const worker = new ShadowWorker({ relay, bridge, relayTaskId, register });
   for (const signal of ["SIGINT", "SIGTERM"]) {
     process.on(signal, () => worker.stop());
   }

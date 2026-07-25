@@ -5,16 +5,34 @@ export class ShadowWorker {
     relay,
     bridge,
     relayTaskId,
+    register,
     pollIntervalMs = 1500,
     onError = (error) => console.error("[shadow-worker]", error.message),
+    onNotice = (message) => console.log("[shadow-worker]", message),
   }) {
     this.relay = relay;
     this.bridge = bridge;
     this.relayTaskId = relayTaskId;
+    this.register = register;
     this.pollIntervalMs = pollIntervalMs;
     this.onError = onError;
+    this.onNotice = onNotice;
     this.cursorLoaded = false;
     this.stopped = false;
+  }
+
+  /**
+   * A relay that restarted from an older backup no longer knows this task. The
+   * owner is the authority on it, so re-register and replay from the position
+   * the relay actually has instead of looping on "Task not found" forever.
+   */
+  async recoverRegistration() {
+    if (!this.register) return false;
+    this.onNotice("Relay 不认识这个任务，正在重新注册");
+    await this.register();
+    this.cursorLoaded = false;
+    this.cursor = undefined;
+    return true;
   }
 
   async syncOwnerEvents() {
@@ -39,8 +57,18 @@ export class ShadowWorker {
     throw new Error("Owner event sync exceeded 20 pages");
   }
 
+  async syncWithRecovery() {
+    try {
+      return await this.syncOwnerEvents();
+    } catch (error) {
+      if (error.status !== 404) throw error;
+      if (!(await this.recoverRegistration())) throw error;
+      return this.syncOwnerEvents();
+    }
+  }
+
   async runOnce() {
-    await this.syncOwnerEvents();
+    await this.syncWithRecovery();
     const commands = await this.relay.getCommands();
     for (const command of commands) {
       if (command.taskId !== this.relayTaskId || !SHADOW_COMMANDS.has(command.type)) continue;
@@ -53,7 +81,7 @@ export class ShadowWorker {
         this.onError(error, command);
       }
     }
-    return this.syncOwnerEvents();
+    return this.syncWithRecovery();
   }
 
   async start() {
