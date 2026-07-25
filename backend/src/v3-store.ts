@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type {
   AgentCommand,
@@ -67,9 +67,47 @@ export class V3Store {
 
   constructor(private readonly filePath = process.env.CLAWME_DATA_FILE ?? "data/clawme-v3.json") {}
 
+  private get tempPath(): string {
+    return `${this.filePath}.tmp`;
+  }
+
+  private get backupPath(): string {
+    return `${this.filePath}.bak`;
+  }
+
+  /**
+   * Reads the newest snapshot that still parses. A write that dies mid-swap can
+   * leave the main file missing or torn, so the previous good copy and the
+   * pending temp file are tried in turn before giving up on the stored state.
+   */
+  private async readSnapshot(): Promise<Partial<V3Snapshot> | undefined> {
+    const sources: Array<[string, string]> = [
+      [this.filePath, ""],
+      [this.backupPath, "主状态文件不可用，已回退到上一份备份"],
+      [this.tempPath, "主状态文件和备份都不可用，已从未完成的临时文件恢复"],
+    ];
+    for (const [path, warning] of sources) {
+      let raw: string;
+      try {
+        raw = await readFile(path, "utf8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+      try {
+        const parsed = JSON.parse(raw) as Partial<V3Snapshot>;
+        if (warning) console.warn(`[clawme] ${warning}: ${path}`);
+        return parsed;
+      } catch {
+        console.warn(`[clawme] 状态文件损坏，继续尝试下一份: ${path}`);
+      }
+    }
+    return undefined;
+  }
+
   async load(): Promise<void> {
-    try {
-      const parsed = JSON.parse(await readFile(this.filePath, "utf8")) as Partial<V3Snapshot>;
+    const parsed = await this.readSnapshot();
+    if (parsed) {
       const derivedHeads: Record<string, number> = {};
       const events = (parsed.events ?? []).map((event) => {
         const previous = derivedHeads[event.taskId] ?? 0;
@@ -94,21 +132,35 @@ export class V3Store {
         commands: parsed.commands ?? [],
         shadowCursors: parsed.shadowCursors ?? {},
       };
+    }
+  }
+
+  /**
+   * Writes through a temp file and keeps the previous copy as a backup. Both
+   * renames target a path that does not exist, because a replacing rename that
+   * fails on Windows can remove the destination without moving the source —
+   * which is how a single EPERM destroyed the whole relay state once.
+   */
+  private async writeSnapshot(body: string): Promise<void> {
+    await mkdir(dirname(this.filePath), { recursive: true });
+    await writeFile(this.tempPath, body, "utf8");
+    await rm(this.backupPath, { force: true });
+    try {
+      await renameAtomic(this.filePath, this.backupPath);
     } catch (error) {
+      // No main file yet on the very first write.
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+    await renameAtomic(this.tempPath, this.filePath);
   }
 
   private persist(): void {
     const body = JSON.stringify(this.data, null, 2);
-    const tempPath = `${this.filePath}.tmp`;
     // A rejected saveChain would both crash the relay on an unhandled rejection
     // and poison every later write, so each link resolves and reports instead.
     this.saveChain = this.saveChain.then(async () => {
       try {
-        await mkdir(dirname(this.filePath), { recursive: true });
-        await writeFile(tempPath, body, "utf8");
-        await renameAtomic(tempPath, this.filePath);
+        await this.writeSnapshot(body);
         this.lastPersistError = undefined;
       } catch (error) {
         this.lastPersistError = error as Error;
