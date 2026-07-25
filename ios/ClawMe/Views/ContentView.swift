@@ -1,4 +1,6 @@
 import SwiftUI
+import MessageUI
+import UIKit
 
 struct ContentView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
@@ -29,6 +31,30 @@ struct ContentView: View {
                 // Dashboard Logic
                 ScrollView {
                     VStack(alignment: .leading, spacing: 15) {
+                        let shadowTasks = connectionManager.remoteTasks.values
+                            .filter { $0.provider == "uu-rescue" }
+                            .sorted { $0.updatedAt > $1.updatedAt }
+                        if !shadowTasks.isEmpty
+                            || !connectionManager.checkpointChallenges.isEmpty
+                            || !connectionManager.shadowResults.isEmpty {
+                            ShadowCoreSection(
+                                tasks: shadowTasks,
+                                challenges: Array(connectionManager.checkpointChallenges.values),
+                                results: Array(connectionManager.shadowResults.values),
+                                busyRequests: connectionManager.busyShadowRequests,
+                                onRequest: { task, reason, mode in
+                                    _ = try await connectionManager.requestCheckpoint(
+                                        taskID: task.id,
+                                        reason: reason,
+                                        mode: mode
+                                    )
+                                },
+                                onConfirm: { challenge in
+                                    try await connectionManager.confirmCheckpoint(challenge)
+                                }
+                            )
+                        }
+
                         Text("Pending Instructions")
                             .font(.title2)
                             .bold()
@@ -91,6 +117,10 @@ struct ContentView: View {
                         result: $mailResult
                     )
                 }
+            }
+            .sheet(isPresented: $showSettings) {
+                ConnectionSettingsView()
+                    .environmentObject(connectionManager)
             }
         }
     }

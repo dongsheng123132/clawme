@@ -1,0 +1,312 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dongsheng123132/action-parity/v0.1.0/schema/action-parity.schema.json",
+  "spec_version": "0.1.0",
+  "application": {
+    "id": "org.clawme.dutydesk",
+    "name": "ClawMe",
+    "version": "0.3.0",
+    "description": "Remote AI duty desk: one owner node, a routing relay, and native shadows that sync actions, state, and events instead of screens."
+  },
+  "conformance_targets": ["AP-1", "AP-2"],
+  "surfaces": [
+    {
+      "id": "ios",
+      "kind": "gui",
+      "required_for_parity": true,
+      "test_driver": "xcuitest",
+      "description": "Native SwiftUI shadow. Action controls carry stable accessibility identifiers so a binding can be checked without running the app."
+    },
+    {
+      "id": "relay-api",
+      "kind": "api",
+      "required_for_parity": true,
+      "description": "ClawMe v3 relay. Routes carry ActionParity ShadowCore 0.1 envelopes; the relay queues and forwards but never becomes a second source of truth."
+    },
+    {
+      "id": "owner-agent",
+      "kind": "ipc",
+      "required_for_parity": false,
+      "description": "Owner-side agent adapter. Projects UURescue task state into relay events and executes confirmed commands on the owner machine."
+    },
+    {
+      "id": "test",
+      "kind": "test",
+      "required_for_parity": false,
+      "description": "Headless contract tests over the store, envelopes, and declared bindings; no device or phone required."
+    }
+  ],
+  "actions": [
+    {
+      "id": "task.status",
+      "title": "Project current task state",
+      "description": "Read the baseline task and pending attention state as a ShadowCore snapshot with an opaque cursor.",
+      "tags": ["shadowcore", "task", "read"],
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task_id"],
+        "properties": {
+          "task_id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["protocol", "type", "stream_id", "payload"],
+        "properties": {
+          "protocol": { "const": "action-parity/sync@0.1" },
+          "type": { "const": "sync.snapshot" },
+          "stream_id": { "type": "string" },
+          "payload": {
+            "type": "object",
+            "required": ["cursor", "state_version", "schema_version", "state"],
+            "properties": {
+              "cursor": { "type": "string" },
+              "state_version": { "type": "integer" },
+              "schema_version": { "type": "string" },
+              "state": { "type": "object" }
+            }
+          }
+        }
+      },
+      "effects": {
+        "class": "read",
+        "risk": "low",
+        "reversible": true,
+        "confirmation": "never",
+        "audit_required": false,
+        "notes": "Secrets and owner-local paths are redacted before an envelope reaches the relay."
+      },
+      "execution": {
+        "headless": true,
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 10000,
+        "progress_events": false
+      },
+      "bindings": [
+        {
+          "surface": "ios",
+          "target": "ios:ConnectionManager.syncTask -> remoteTasks",
+          "test": "backend/test/action-parity.test.mjs:ios bindings exist"
+        },
+        {
+          "surface": "relay-api",
+          "target": "api:GET /v3/sync/tasks/:id --json",
+          "test": "backend/test/v3-sync-route.test.mjs"
+        },
+        {
+          "surface": "owner-agent",
+          "target": "agent:UURescueBridge.events -> POST /v3/agent/tasks/:id/shadow-delta",
+          "test": "agent/test/uurescue-bridge.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "task.events",
+      "title": "Read an ordered task delta",
+      "description": "Read events after an acknowledged opaque cursor; an unchanged stream returns an empty delta with the same cursor.",
+      "tags": ["shadowcore", "events", "read"],
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task_id"],
+        "properties": {
+          "task_id": { "type": "string", "minLength": 1 },
+          "after": { "type": "string", "minLength": 1 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 100 }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["protocol", "type", "stream_id", "payload"],
+        "properties": {
+          "protocol": { "const": "action-parity/sync@0.1" },
+          "type": { "const": "sync.delta" },
+          "stream_id": { "type": "string" },
+          "payload": {
+            "type": "object",
+            "required": ["previous_cursor", "cursor", "state_version", "has_more", "events"],
+            "properties": {
+              "previous_cursor": { "type": "string" },
+              "cursor": { "type": "string" },
+              "state_version": { "type": "integer" },
+              "has_more": { "type": "boolean" },
+              "events": { "type": "array" }
+            }
+          }
+        }
+      },
+      "effects": {
+        "class": "read",
+        "risk": "low",
+        "reversible": true,
+        "confirmation": "never",
+        "audit_required": false
+      },
+      "execution": {
+        "headless": true,
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 10000,
+        "progress_events": false
+      },
+      "bindings": [
+        {
+          "surface": "ios",
+          "target": "ios:ConnectionManager.syncTask(after:) -> cursor paging",
+          "test": "backend/test/action-parity.test.mjs:ios bindings exist"
+        },
+        {
+          "surface": "relay-api",
+          "target": "api:GET /v3/sync/tasks/:id?after=<cursor>&limit=<n> --json",
+          "test": "backend/test/v3-sync-route.test.mjs"
+        },
+        {
+          "surface": "owner-agent",
+          "target": "agent:UURescueBridge.events(after) -> shadow cursor resume",
+          "test": "agent/test/uurescue-bridge.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "checkpoint.challenge",
+      "title": "Request an owner confirmation challenge",
+      "description": "Ask the owner node for a one-time challenge bound to actor, action, input digest, and state version. The relay queues the request; it cannot issue the challenge itself.",
+      "tags": ["shadowcore", "checkpoint", "confirmation"],
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task_id", "reason"],
+        "properties": {
+          "task_id": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 },
+          "confirmation_mode": { "type": "string", "enum": ["explicit", "biometric", "system"] },
+          "request_key": { "type": "string", "minLength": 1 }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["request_id", "status"],
+        "properties": {
+          "request_id": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "challenge_ready"] },
+          "created": { "type": "boolean" }
+        }
+      },
+      "effects": {
+        "class": "write",
+        "risk": "low",
+        "reversible": true,
+        "confirmation": "never",
+        "audit_required": true,
+        "notes": "Queues a command and records a short-lived challenge; it never changes task state."
+      },
+      "execution": {
+        "headless": true,
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 15000,
+        "progress_events": false
+      },
+      "bindings": [
+        {
+          "surface": "ios",
+          "target": "ios:accessibilityIdentifier=clawme.action.checkpoint.challenge",
+          "test": "backend/test/action-parity.test.mjs:ios bindings exist"
+        },
+        {
+          "surface": "relay-api",
+          "target": "api:POST /v3/tasks/:id/shadow/checkpoint-challenges --json",
+          "test": "backend/test/v3-shadow-route.test.mjs"
+        },
+        {
+          "surface": "owner-agent",
+          "target": "agent:command shadow_challenge -> uu-rescue sync-challenge",
+          "test": "agent/test/uurescue-bridge.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "checkpoint.create",
+      "title": "Execute a confirmed checkpoint on the owner node",
+      "description": "Submit the confirmed command with an idempotency key and expected state version. The owner verifies the challenge and executes; a stale state version returns a conflict instead of a write.",
+      "tags": ["shadowcore", "checkpoint", "write"],
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task_id", "request_id", "confirmation"],
+        "properties": {
+          "task_id": { "type": "string", "minLength": 1 },
+          "request_id": { "type": "string", "minLength": 1 },
+          "confirmation": {
+            "type": "object",
+            "required": ["mode", "confirmed_at"],
+            "properties": {
+              "mode": { "type": "string", "enum": ["explicit", "biometric", "system"] },
+              "confirmed_at": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": { "type": "string" },
+          "result": { "type": ["object", "null"] }
+        }
+      },
+      "effects": {
+        "class": "write",
+        "risk": "medium",
+        "reversible": false,
+        "confirmation": "always",
+        "audit_required": true,
+        "notes": "The phone transmits only the confirmation time and mode; no biometric template or reusable secret enters the relay."
+      },
+      "execution": {
+        "headless": true,
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 30000,
+        "progress_events": false
+      },
+      "bindings": [
+        {
+          "surface": "ios",
+          "target": "ios:accessibilityIdentifier=clawme.action.checkpoint.create",
+          "test": "backend/test/action-parity.test.mjs:ios bindings exist"
+        },
+        {
+          "surface": "relay-api",
+          "target": "api:POST /v3/tasks/:id/shadow/checkpoint-challenges/:requestId/confirm --json",
+          "test": "backend/test/v3-shadow-route.test.mjs"
+        },
+        {
+          "surface": "owner-agent",
+          "target": "agent:command shadow_execute -> uu-rescue sync-command",
+          "test": "agent/test/uurescue-bridge.test.mjs"
+        }
+      ]
+    }
+  ],
+  "state": {
+    "queries": ["task.status", "task.events"],
+    "events": [
+      "task.created",
+      "task.updated",
+      "task.started",
+      "task.progress",
+      "task.completed",
+      "task.failed",
+      "attention.input_required",
+      "attention.decided",
+      "command.queued",
+      "command.acknowledged",
+      "sync.challenge",
+      "sync.result",
+      "sync.conflict",
+      "checkpoint.created"
+    ]
+  }
+}

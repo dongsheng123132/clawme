@@ -16,7 +16,13 @@ export class RelayClient {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(body.error || `ClawMe Relay HTTP ${response.status}`);
+      const error = new Error(
+        body.message || body.error || `ClawMe Relay HTTP ${response.status}`,
+      );
+      error.code = body.error;
+      error.status = response.status;
+      error.body = body;
+      throw error;
     }
     return body;
   }
@@ -66,6 +72,27 @@ export class RelayClient {
     return this.request(`/v3/agent/commands/${encodeURIComponent(commandId)}/ack`, {
       method: "POST",
       body: JSON.stringify({ machineId: this.machineId }),
+    });
+  }
+
+  reportCommandResult(commandId, result) {
+    return this.request(`/v3/agent/commands/${encodeURIComponent(commandId)}/result`, {
+      method: "POST",
+      body: JSON.stringify({ machineId: this.machineId, result }),
+    });
+  }
+
+  async getShadowCursor(taskId) {
+    const response = await this.request(
+      `/v3/agent/tasks/${encodeURIComponent(taskId)}/shadow-cursor`,
+    );
+    return response.cursor ?? undefined;
+  }
+
+  importShadowDelta(taskId, delta) {
+    return this.request(`/v3/agent/tasks/${encodeURIComponent(taskId)}/shadow-delta`, {
+      method: "POST",
+      body: JSON.stringify({ delta }),
     });
   }
 }

@@ -22,6 +22,7 @@ Since there is no `.xcodeproj` file (binary), you need to create a new project i
 *   **Services**: `Services/ConnectionManager.swift` (Handles cursor-based snapshot/delta sync; WebSocket/Push can wake it later)
 *   **Models**: `Models/Instruction.swift` (Parses JSON commands)
 *   **Sync Model**: `Models/SyncEnvelope.swift` (ActionParity snapshot/delta contract shared with the relay)
+*   **Native Shadow UI**: `Views/ShadowCoreView.swift` (owner challenge, system authentication, result cards)
 
 ## Features (Planned)
 
@@ -36,3 +37,15 @@ The current vertical slice does not stream the Windows screen. Call
 snapshot and then only events after the saved opaque cursor. The iOS UI remains
 fully native while sharing task semantics with Windows, macOS, web, and future
 HarmonyOS clients.
+
+## Native checkpoint confirmation
+
+After `syncTask(taskID:baseURL:token:)` establishes the in-memory connection,
+the UI can call `requestCheckpoint(taskID:reason:mode:)`. The app polls the
+durable task cursor until the owner-issued challenge arrives, displays the exact
+action and reason, uses LocalAuthentication for `.biometric` or `.system`, and
+then calls the confirm endpoint. The app never sends an actor ID or biometric
+material; the relay derives the actor from the pairing token.
+
+The final `sync.result`, `sync.conflict`, and the underlying UURescue
+`checkpoint.created` event return through the same cursor stream.

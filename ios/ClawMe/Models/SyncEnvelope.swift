@@ -46,6 +46,65 @@ enum JSONValue: Codable, Equatable {
         guard case .string(let value) = self else { return nil }
         return value
     }
+
+    var boolValue: Bool? {
+        guard case .bool(let value) = self else { return nil }
+        return value
+    }
+
+    var intValue: Int? {
+        guard case .number(let value) = self, value.rounded() == value else { return nil }
+        return Int(value)
+    }
+
+    var objectValue: [String: JSONValue]? {
+        guard case .object(let value) = self else { return nil }
+        return value
+    }
+}
+
+enum ShadowConfirmationMode: String, Codable, CaseIterable, Identifiable {
+    case explicit
+    case biometric
+    case system
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .explicit: return "明确确认"
+        case .biometric: return "生物识别"
+        case .system: return "系统认证"
+        }
+    }
+}
+
+struct ShadowCheckpointChallenge: Identifiable, Equatable {
+    let requestId: String
+    let taskId: String
+    let actionId: String
+    let reason: String
+    let mode: ShadowConfirmationMode
+    let challengeId: String
+    let expectedStateVersion: Int
+    let issuedAt: String
+    let expiresAt: String
+
+    var id: String { requestId }
+}
+
+struct ShadowActionResult: Identifiable, Equatable {
+    let requestId: String
+    let taskId: String
+    let actionId: String
+    let ok: Bool
+    let resultType: String
+    let checkpointId: String?
+    let checkpointSHA256: String?
+    let errorCode: String?
+    let errorMessage: String?
+
+    var id: String { requestId }
 }
 
 struct RemoteTask: Codable, Identifiable, Equatable {

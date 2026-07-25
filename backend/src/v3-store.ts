@@ -16,6 +16,20 @@ import {
   taskDeltaEnvelope,
   taskSnapshotEnvelope,
 } from "./sync.js";
+import {
+  buildCheckpointCommand,
+  flattenShadowResult,
+  normalizeMode,
+  normalizeReason,
+  normalizeRequestKey,
+  ownerTaskId,
+  ShadowError,
+  SHADOW_ACTION,
+  SHADOW_PROTOCOL,
+  taskStatusFromOwnerEvent,
+  validateChallengeResult,
+  type ShadowActor,
+} from "./shadow.js";
 
 const EMPTY: V3Snapshot = {
   machines: [],
@@ -24,6 +38,7 @@ const EMPTY: V3Snapshot = {
   eventHeads: {},
   attention: [],
   commands: [],
+  shadowCursors: {},
 };
 
 export class V3Store {
@@ -57,6 +72,7 @@ export class V3Store {
         eventHeads,
         attention: parsed.attention ?? [],
         commands: parsed.commands ?? [],
+        shadowCursors: parsed.shadowCursors ?? {},
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -314,5 +330,283 @@ export class V3Store {
       this.persist();
     }
     return command;
+  }
+
+  requestCheckpointChallenge(input: {
+    taskId: string;
+    actor: ShadowActor;
+    reason: unknown;
+    confirmationMode: unknown;
+    requestKey: unknown;
+  }): { command: AgentCommand; created: boolean } {
+    const task = this.getTask(input.taskId);
+    if (!task) throw new ShadowError("task_not_found", "Task not found", 404);
+    const reason = normalizeReason(input.reason);
+    const confirmationMode = normalizeMode(input.confirmationMode);
+    const requestKey = normalizeRequestKey(input.requestKey);
+    const existing = this.data.commands.find(
+      (command) => command.type === "shadow_challenge"
+        && command.taskId === task.id
+        && command.payload.request_key === requestKey
+        && (command.payload.actor as Record<string, unknown> | undefined)?.id === input.actor.id,
+    );
+    if (existing) {
+      const previousInput = existing.payload.input as Record<string, unknown> | undefined;
+      if (
+        previousInput?.reason !== reason
+        || existing.payload.confirmation_mode !== confirmationMode
+      ) {
+        throw new ShadowError(
+          "idempotency_key_reused",
+          "Idempotency-Key cannot be reused for a different checkpoint request",
+          409,
+        );
+      }
+      return { command: existing, created: false };
+    }
+
+    const command = this.addCommand({
+      machineId: task.machineId,
+      taskId: task.id,
+      type: "shadow_challenge",
+      payload: {
+        request_key: requestKey,
+        action_id: SHADOW_ACTION,
+        owner_task_id: ownerTaskId(task),
+        actor: input.actor,
+        confirmation_mode: confirmationMode,
+        input: { reason },
+      },
+    });
+    this.addEvent(task.id, {
+      type: "sync.challenge.requested",
+      data: {
+        request_id: command.id,
+        action_id: SHADOW_ACTION,
+        reason,
+        confirmation_mode: confirmationMode,
+        actor_id: input.actor.id,
+      },
+    });
+    return { command, created: true };
+  }
+
+  confirmCheckpointChallenge(input: {
+    taskId: string;
+    requestId: string;
+    actor: ShadowActor;
+    confirmedAt: unknown;
+  }): { command: AgentCommand; created: boolean } {
+    const task = this.getTask(input.taskId);
+    if (!task) throw new ShadowError("task_not_found", "Task not found", 404);
+    const challengeRequest = this.data.commands.find(
+      (command) => command.id === input.requestId
+        && command.taskId === task.id
+        && command.type === "shadow_challenge",
+    );
+    if (!challengeRequest) {
+      throw new ShadowError("challenge_not_found", "Checkpoint challenge was not found", 404);
+    }
+    const requestActor = challengeRequest.payload.actor as Record<string, unknown> | undefined;
+    if (
+      requestActor?.id !== input.actor.id
+      || requestActor.kind !== input.actor.kind
+      || (requestActor.surface ?? null) !== (input.actor.surface ?? null)
+    ) {
+      throw new ShadowError(
+        "challenge_actor_mismatch",
+        "Checkpoint challenge belongs to another authenticated actor",
+        403,
+      );
+    }
+    if (!challengeRequest.result) {
+      throw new ShadowError("challenge_pending", "Owner has not issued the challenge yet", 409);
+    }
+    const challenge = validateChallengeResult(challengeRequest, challengeRequest.result);
+    if (!challenge) {
+      throw new ShadowError("challenge_failed", "Owner could not issue the challenge", 409);
+    }
+    if (typeof input.confirmedAt !== "string") {
+      throw new ShadowError("invalid_confirmation_time", "confirmed_at is required");
+    }
+
+    const existing = this.data.commands.find(
+      (command) => command.type === "shadow_execute"
+        && command.taskId === task.id
+        && command.payload.challenge_request_id === challengeRequest.id,
+    );
+    if (existing) return { command: existing, created: false };
+
+    const envelope = buildCheckpointCommand(challengeRequest, challenge, input.confirmedAt);
+    const command = this.addCommand({
+      machineId: task.machineId,
+      taskId: task.id,
+      type: "shadow_execute",
+      payload: {
+        challenge_request_id: challengeRequest.id,
+        owner_task_id: ownerTaskId(task),
+        envelope,
+      },
+    });
+    this.addEvent(task.id, {
+      type: "sync.command.confirmed",
+      data: {
+        request_id: challengeRequest.id,
+        command_id: command.id,
+        action_id: SHADOW_ACTION,
+        actor_id: input.actor.id,
+      },
+    });
+    return { command, created: true };
+  }
+
+  completeCommand(
+    id: string,
+    machineId: string,
+    result: Record<string, unknown>,
+  ): AgentCommand | undefined {
+    const command = this.data.commands.find(
+      (item) => item.id === id && item.machineId === machineId,
+    );
+    if (!command) return undefined;
+    if (command.result) return command;
+    if (!["shadow_challenge", "shadow_execute"].includes(command.type)) {
+      throw new ShadowError(
+        "command_result_unsupported",
+        "This command type does not accept an owner result",
+        409,
+      );
+    }
+
+    const completedAt = new Date().toISOString();
+    let event: { kind: string; data: Record<string, unknown> };
+    if (command.type === "shadow_challenge") {
+      const challenge = validateChallengeResult(command, result);
+      if (challenge) {
+        const input = command.payload.input as Record<string, unknown>;
+        event = {
+          kind: "sync.challenge",
+          data: {
+            request_id: command.id,
+            action_id: challenge.action_id,
+            reason: input.reason,
+            confirmation_mode: challenge.mode,
+            challenge_id: challenge.challenge_id,
+            expected_state_version: challenge.expected_state_version,
+            challenge_issued_at: challenge.issued_at,
+            challenge_expires_at: challenge.expires_at,
+          },
+        };
+      } else {
+        const error = result.error && typeof result.error === "object"
+          ? result.error as Record<string, unknown>
+          : {};
+        event = {
+          kind: "sync.challenge.failed",
+          data: {
+            request_id: command.id,
+            action_id: command.payload.action_id,
+            error_code: error.code ?? "owner_challenge_failed",
+            error_message: error.message ?? "Owner could not issue a confirmation challenge",
+          },
+        };
+      }
+    } else {
+      event = flattenShadowResult(command, result);
+    }
+
+    command.result = result;
+    command.completedAt = completedAt;
+    command.acknowledgedAt = completedAt;
+    if (command.taskId) this.addEvent(command.taskId, { type: event.kind, data: event.data });
+    else this.persist();
+    return command;
+  }
+
+  getShadowCursor(taskId: string): string | undefined {
+    return this.data.shadowCursors[taskId];
+  }
+
+  importShadowDelta(
+    taskId: string,
+    envelope: Record<string, unknown>,
+  ): { imported: number; cursor: string; hasMore: boolean } {
+    const task = this.getTask(taskId);
+    if (!task) throw new ShadowError("task_not_found", "Task not found", 404);
+    const expectedStream = `uu-rescue:task:${ownerTaskId(task)}`;
+    if (
+      envelope.protocol !== SHADOW_PROTOCOL
+      || envelope.type !== "sync.delta"
+      || envelope.stream_id !== expectedStream
+    ) {
+      throw new ShadowError(
+        "shadow_delta_mismatch",
+        "Owner delta does not belong to this task",
+        409,
+      );
+    }
+    const payload = envelope.payload as Record<string, unknown> | undefined;
+    if (!payload || !Array.isArray(payload.events)) {
+      throw new ShadowError("invalid_shadow_delta", "Owner delta payload is invalid");
+    }
+    if (payload.events.length > 1000) {
+      throw new ShadowError("invalid_shadow_delta", "Owner delta exceeds 1000 events");
+    }
+    if (typeof payload.cursor !== "string" || typeof payload.previous_cursor !== "string") {
+      throw new ShadowError("invalid_shadow_delta", "Owner delta cursors are required");
+    }
+    const previous = this.data.shadowCursors[taskId];
+    if (previous && previous !== payload.previous_cursor) {
+      throw new ShadowError(
+        "shadow_cursor_conflict",
+        "Relay already imported a different owner position",
+        409,
+        { current_cursor: previous },
+      );
+    }
+
+    let imported = 0;
+    for (const rawEvent of payload.events) {
+      if (!rawEvent || typeof rawEvent !== "object" || Array.isArray(rawEvent)) {
+        throw new ShadowError("invalid_shadow_delta", "Owner event is invalid");
+      }
+      const event = rawEvent as Record<string, unknown>;
+      const entity = event.entity as Record<string, unknown> | undefined;
+      const eventPayload = event.payload as Record<string, unknown> | undefined;
+      if (
+        typeof event.event_id !== "string"
+        || !Number.isSafeInteger(event.sequence)
+        || typeof event.kind !== "string"
+        || entity?.id !== ownerTaskId(task)
+        || !eventPayload
+      ) {
+        throw new ShadowError("invalid_shadow_delta", "Owner event fields are invalid");
+      }
+      const alreadyImported = this.data.events.some(
+        (item) => item.taskId === taskId
+          && item.data?.source_event_id === event.event_id
+          && item.data?.source_stream_id === expectedStream,
+      );
+      if (alreadyImported) continue;
+      this.addEvent(taskId, {
+        type: event.kind,
+        message: typeof eventPayload.message === "string" ? eventPayload.message : undefined,
+        data: {
+          ...eventPayload,
+          source_event_id: event.event_id,
+          source_sequence: event.sequence,
+          source_stream_id: expectedStream,
+        },
+        status: taskStatusFromOwnerEvent(event.kind, eventPayload),
+      });
+      imported += 1;
+    }
+    this.data.shadowCursors[taskId] = payload.cursor;
+    this.persist();
+    return {
+      imported,
+      cursor: payload.cursor,
+      hasMore: payload.has_more === true,
+    };
   }
 }

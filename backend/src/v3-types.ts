@@ -75,10 +75,18 @@ export interface AgentCommand {
   id: string;
   machineId: string;
   taskId?: string;
-  type: "attention_decision" | "user_message" | "switch_model" | "pause";
+  type:
+    | "attention_decision"
+    | "user_message"
+    | "switch_model"
+    | "pause"
+    | "shadow_challenge"
+    | "shadow_execute";
   payload: Record<string, unknown>;
   createdAt: string;
   acknowledgedAt?: string;
+  completedAt?: string;
+  result?: Record<string, unknown>;
 }
 
 export interface V3Snapshot {
@@ -88,4 +96,5 @@ export interface V3Snapshot {
   eventHeads: Record<string, number>;
   attention: AttentionRequest[];
   commands: AgentCommand[];
+  shadowCursors: Record<string, string>;
 }

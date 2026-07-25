@@ -97,7 +97,7 @@ export class CodexAdapter {
     this.rpc.onNotification((message) => this.handleNotification(message));
 
     await this.rpc.request("initialize", {
-      clientInfo: { name: "clawme-agent", title: "ClawMe Agent", version: "0.3.0" },
+      clientInfo: { name: "clawme-agent", title: "ClawMe Agent", version: "0.4.0" },
       capabilities: null,
     });
     this.rpc.notify("initialized");
