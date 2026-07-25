@@ -31,6 +31,25 @@ import {
   type ShadowActor,
 } from "./shadow.js";
 
+// Windows fails rename() with EPERM/EBUSY while an antivirus scanner, the search
+// indexer or a backup agent still holds the destination handle. It clears in
+// milliseconds, so a bounded retry keeps the atomic swap without a crash.
+const RENAME_RETRY_CODES = new Set(["EPERM", "EBUSY", "EACCES"]);
+const RENAME_ATTEMPTS = 5;
+
+async function renameAtomic(from: string, to: string): Promise<void> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await rename(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      if (attempt >= RENAME_ATTEMPTS || !RENAME_RETRY_CODES.has(code)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 20 * attempt));
+    }
+  }
+}
+
 const EMPTY: V3Snapshot = {
   machines: [],
   tasks: [],
@@ -44,6 +63,7 @@ const EMPTY: V3Snapshot = {
 export class V3Store {
   private data: V3Snapshot = structuredClone(EMPTY);
   private saveChain: Promise<void> = Promise.resolve();
+  private lastPersistError: Error | undefined;
 
   constructor(private readonly filePath = process.env.CLAWME_DATA_FILE ?? "data/clawme-v3.json") {}
 
@@ -82,15 +102,28 @@ export class V3Store {
   private persist(): void {
     const body = JSON.stringify(this.data, null, 2);
     const tempPath = `${this.filePath}.tmp`;
+    // A rejected saveChain would both crash the relay on an unhandled rejection
+    // and poison every later write, so each link resolves and reports instead.
     this.saveChain = this.saveChain.then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true });
-      await writeFile(tempPath, body, "utf8");
-      await rename(tempPath, this.filePath);
+      try {
+        await mkdir(dirname(this.filePath), { recursive: true });
+        await writeFile(tempPath, body, "utf8");
+        await renameAtomic(tempPath, this.filePath);
+        this.lastPersistError = undefined;
+      } catch (error) {
+        this.lastPersistError = error as Error;
+        console.error("[clawme] 持久化失败，relay 继续服务但状态未落盘:", error);
+      }
     });
   }
 
   async flush(): Promise<void> {
     await this.saveChain;
+  }
+
+  /** Set when the most recent write failed; cleared by the next successful write. */
+  get persistError(): Error | undefined {
+    return this.lastPersistError;
   }
 
   heartbeat(input: Omit<Machine, "lastSeenAt">): Machine {
