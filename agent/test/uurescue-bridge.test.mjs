@@ -118,11 +118,18 @@ test("Shadow worker imports owner deltas and reports only its reliable commands"
     async reportCommandResult(id, result) {
       calls.push(["result", id, result.ok]);
     },
+    async acknowledge(id) {
+      calls.push(["ack", id]);
+    },
+    async addEvent(taskId, event) {
+      calls.push(["event", taskId, event.type]);
+    },
   };
   const worker = new ShadowWorker({
     relay,
     bridge,
     relayTaskId: "relay-task",
+    onNotice: () => {},
     onError: (error) => assert.fail(error),
   });
 
@@ -130,6 +137,14 @@ test("Shadow worker imports owner deltas and reports only its reliable commands"
 
   assert.ok(calls.some((call) => call[0] === "handle" && call[1] === "shadow-1"));
   assert.ok(calls.some((call) => call[0] === "result" && call[1] === "shadow-1"));
-  assert.equal(calls.some((call) => call[1] === "codex-1"), false);
+
+  // The relay rejects an owner result for a non-ShadowCore command, so this one
+  // is acknowledged and reported on the task stream instead.
+  assert.equal(calls.some((call) => call[0] === "result" && call[1] === "codex-1"), false);
+  assert.ok(calls.some((call) => call[0] === "ack" && call[1] === "codex-1"));
+  assert.ok(calls.some((call) => call[0] === "event" && call[2] === "command.unsupported"));
+
+  // Another task's command still belongs to another worker.
+  assert.equal(calls.some((call) => call[1] === "other-1"), false);
   assert.equal(calls.filter((call) => call[0] === "import").length, 2);
 });

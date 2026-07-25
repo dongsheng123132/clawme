@@ -73,9 +73,8 @@ if (command === "shadow") {
 
   // Also used to recover after a relay restart, so it re-reads the live owner
   // state rather than replaying whatever was true at agent startup.
-  async function register() {
-    const current = await bridge.status();
-    await relay.heartbeat({
+  function heartbeat() {
+    return relay.heartbeat({
       name: machineName,
       platform: platform(),
       agentVersion: "0.4.0",
@@ -86,6 +85,11 @@ if (command === "shadow") {
         "owner-challenge",
       ],
     });
+  }
+
+  async function register() {
+    const current = await bridge.status();
+    await heartbeat();
     await relay.upsertTask({
       id: relayTaskId,
       provider: "uu-rescue",
@@ -98,7 +102,7 @@ if (command === "shadow") {
 
   await register();
 
-  const worker = new ShadowWorker({ relay, bridge, relayTaskId, register });
+  const worker = new ShadowWorker({ relay, bridge, relayTaskId, register, heartbeat });
   for (const signal of ["SIGINT", "SIGTERM"]) {
     process.on(signal, () => worker.stop());
   }
@@ -109,12 +113,22 @@ if (command === "shadow") {
   process.exit(0);
 }
 
-await relay.heartbeat({
-  name: machineName,
-  platform: platform(),
-  agentVersion: "0.4.0",
-  capabilities: ["codex-native", "approval", "task-events"],
-});
+function codexHeartbeat() {
+  return relay.heartbeat({
+    name: machineName,
+    platform: platform(),
+    agentVersion: "0.4.0",
+    capabilities: ["codex-native", "approval", "task-events"],
+  });
+}
+
+await codexHeartbeat();
+// Keep "last seen" moving; a stamp frozen at startup makes the duty desk show
+// a machine that may have been offline for hours as online.
+const heartbeatTimer = setInterval(() => {
+  codexHeartbeat().catch((error) => console.error("[agent] 心跳失败:", error.message));
+}, 30_000);
+heartbeatTimer.unref();
 
 const adapter = new CodexAdapter({
   relay,
@@ -131,6 +145,7 @@ console.log(`手机值班台: ${baseUrl.replace("api.", "www.")}/app.html`);
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
+    clearInterval(heartbeatTimer);
     adapter.stop();
     process.exit(0);
   });
