@@ -26,7 +26,7 @@ const sources = {
   ].join("\n"),
   agent: [
     read("agent/src/shadow-worker.mjs"),
-    read("agent/src/uurescue-bridge.mjs"),
+    read("agent/src/action-cli-bridge.mjs"),
   ].join("\n"),
 };
 
@@ -118,11 +118,11 @@ test("owner agent 绑定指向真实的命令类型", () => {
       );
       continue;
     }
-    const bridge = /^agent:UURescueBridge\.(\w+)/.exec(binding.target);
+    const bridge = /^agent:ActionCliBridge\.(\w+)/.exec(binding.target);
     assert.ok(bridge, `无法解析 agent 绑定：${binding.target}`);
     assert.ok(
       sources.agent.includes(`${bridge[1]}(`),
-      `${action.id}: agent 源码里找不到 UURescueBridge.${bridge[1]}`,
+      `${action.id}: agent 源码里找不到 ActionCliBridge.${bridge[1]}`,
     );
   }
 });

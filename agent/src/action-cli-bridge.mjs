@@ -8,6 +8,8 @@ const MAX_OUTPUT_BYTES = 1024 * 1024;
 const SHADOW_PROTOCOL = "action-parity/sync@0.1";
 const CHALLENGE_ACTION = "checkpoint.challenge";
 const CREATE_ACTION = "checkpoint.create";
+const STATUS_ACTION = "task.status";
+const EVENTS_ACTION = "task.events";
 
 function processRunner(executable, args, { cwd, timeoutMs }) {
   return new Promise((resolveRun, reject) => {
@@ -59,23 +61,50 @@ function commandFor(cliPath, args) {
   if ([".js", ".mjs", ".cjs"].includes(extension)) {
     return { executable: process.execPath, args: [resolve(cliPath), ...args] };
   }
+  if (extension === ".ps1") {
+    return {
+      executable: "powershell",
+      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", resolve(cliPath), ...args],
+    };
+  }
   return { executable: cliPath, args };
 }
 
-function parseMachineOutput(run) {
+/**
+ * Two real ActionParity cores disagree on the wire: UURescue answers
+ * {ok, data, error} behind --json, Open365 answers {ok, output, error} behind
+ * -Json. The Action IDs are shared, the dialect is not, so the seam lives here
+ * instead of leaking into the ShadowCore flow.
+ */
+export const ACTION_CLI_DIALECTS = {
+  "uu-rescue": {
+    runArgs: (actionId, file) => [
+      "action", "run", actionId, "--input-file", file, "--json", "--no-input",
+    ],
+    payloadOf: (envelope) => envelope.data,
+  },
+  open365: {
+    runArgs: (actionId, file) => [
+      "action", "run", actionId, "-InputFile", file, "-Json",
+    ],
+    payloadOf: (envelope) => envelope.output,
+  },
+};
+
+function parseMachineOutput(run, label) {
   const text = run.stdout.trim();
   if (!text) {
     throw new Error(
-      `UURescue CLI returned no JSON${run.stderr.trim() ? `: ${run.stderr.trim()}` : ""}`,
+      `${label} CLI returned no JSON${run.stderr.trim() ? `: ${run.stderr.trim()}` : ""}`,
     );
   }
   if (text.split(/\r?\n/).length !== 1) {
-    throw new Error("UURescue CLI polluted machine-readable stdout");
+    throw new Error(`${label} CLI polluted machine-readable stdout`);
   }
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error("UURescue CLI returned invalid JSON");
+    throw new Error(`${label} CLI returned invalid JSON`);
   }
 }
 
@@ -85,8 +114,8 @@ function parseMachineOutput(run) {
  * carries no state version: the phone's recovery path is to refresh and request
  * a new challenge, and the event sync that follows carries the fresh version.
  */
-function resultEnvelope(envelope, inner, result) {
-  const data = result.data ?? {};
+function resultEnvelope(envelope, inner, result, payload) {
+  const data = payload ?? {};
   const checkpoint = data.checkpoint ?? {};
   const ok = result.ok === true;
   return {
@@ -114,20 +143,27 @@ function resultEnvelope(envelope, inner, result) {
   };
 }
 
-export class UuRescueBridge {
+export class ActionCliBridge {
   constructor({
     cwd,
     taskId,
     cliPath,
+    provider = "uu-rescue",
     timeoutMs = 30_000,
     runner = processRunner,
   }) {
     if (!cwd || !cliPath) {
-      throw new Error("UURescue bridge requires cwd and cliPath");
+      throw new Error("Action CLI bridge requires cwd and cliPath");
+    }
+    const dialect = ACTION_CLI_DIALECTS[provider];
+    if (!dialect) {
+      throw new Error(`No action CLI dialect is known for provider ${provider}`);
     }
     this.cwd = resolve(cwd);
     this.taskId = taskId;
     this.cliPath = cliPath;
+    this.provider = provider;
+    this.dialect = dialect;
     this.timeoutMs = timeoutMs;
     this.runner = runner;
   }
@@ -138,11 +174,11 @@ export class UuRescueBridge {
       cwd: this.cwd,
       timeoutMs: this.timeoutMs,
     });
-    return parseMachineOutput(run);
+    return parseMachineOutput(run, this.provider);
   }
 
   async withJSONFile(name, value, operation) {
-    const dir = await mkdtemp(join(tmpdir(), "clawme-uurescue-"));
+    const dir = await mkdtemp(join(tmpdir(), "clawme-action-"));
     const file = join(dir, name);
     try {
       await writeFile(file, `${JSON.stringify(value)}\n`, {
@@ -156,43 +192,47 @@ export class UuRescueBridge {
   }
 
   async status() {
-    const result = await this.run([
-      "status",
-      ...(this.taskId ? ["--task", this.taskId] : []),
-      "--json",
-    ]);
-    if (result.ok !== true) throw new Error(result.error || "UURescue status failed");
-    if (!this.taskId && result.task_id) this.taskId = result.task_id;
-    return result;
+    const result = await this.runAction(STATUS_ACTION, {
+      ...(this.taskId ? { task: this.taskId } : {}),
+    });
+    if (result.ok !== true) {
+      throw new Error(result.error?.message || result.error?.code || "task.status failed");
+    }
+    const payload = this.dialect.payloadOf(result) ?? {};
+    const task = payload.task ?? {};
+    if (!this.taskId && task.id) this.taskId = task.id;
+    return {
+      task_id: task.id,
+      title: task.title,
+      state: task.state,
+      next_step: payload.next,
+    };
   }
 
   async events(after) {
-    if (!this.taskId) throw new Error("UURescue task has not been discovered");
-    const args = ["events", "--task", this.taskId, "--limit", "100", "--json"];
-    if (after) args.push("--after", after);
-    const result = await this.run(args);
-    if (result.ok !== true || !result.delta) {
-      throw new Error(result.error || "UURescue events failed");
+    if (!this.taskId) throw new Error("The owner task has not been discovered");
+    const result = await this.runAction(EVENTS_ACTION, {
+      task: this.taskId,
+      limit: 100,
+      ...(after ? { after } : {}),
+    });
+    const delta = result.ok === true ? this.dialect.payloadOf(result)?.delta : undefined;
+    if (!delta) {
+      throw new Error(result.error?.message || result.error?.code || "task.events failed");
     }
-    return result.delta;
+    return delta;
   }
 
   /**
-   * The one way this bridge reaches the action core. Both sides name the same
-   * Action IDs, so nothing here is specific to UURescue's ShadowCore
-   * compatibility commands. Input travels through a private temp file, never
-   * the command line, because the command line is readable by other processes.
+   * The one way this bridge reaches an action core. The Action ID is shared with
+   * the relay and the phone; only the dialect differs per provider. Input travels
+   * through a private temp file, never the command line, because the command
+   * line is readable by other processes on the machine.
    */
   async runAction(actionId, input) {
-    return this.withJSONFile("action-input.json", input, (file) => this.run([
-      "action",
-      "run",
-      actionId,
-      "--input-file",
-      file,
-      "--json",
-      "--no-input",
-    ]));
+    return this.withJSONFile("action-input.json", input, (file) => this.run(
+      this.dialect.runArgs(actionId, file),
+    ));
   }
 
   async issueChallenge(command) {
@@ -212,7 +252,7 @@ export class UuRescueBridge {
         error: result.error ?? { code: "owner_challenge_failed" },
       };
     }
-    return { ok: true, challenge: (result.data ?? {}).challenge };
+    return { ok: true, challenge: (this.dialect.payloadOf(result) ?? {}).challenge };
   }
 
   async execute(command) {
@@ -240,7 +280,7 @@ export class UuRescueBridge {
     });
     return {
       ok: result.ok === true,
-      response: resultEnvelope(envelope, inner, result),
+      response: resultEnvelope(envelope, inner, result, this.dialect.payloadOf(result)),
     };
   }
 

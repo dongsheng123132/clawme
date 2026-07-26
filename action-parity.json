@@ -96,8 +96,8 @@
         },
         {
           "surface": "owner-agent",
-          "target": "agent:UURescueBridge.events -> POST /v3/agent/tasks/:id/shadow-delta",
-          "test": "agent/test/uurescue-bridge.test.mjs"
+          "target": "agent:ActionCliBridge.events -> POST /v3/agent/tasks/:id/shadow-delta",
+          "test": "agent/test/action-cli-bridge.test.mjs"
         }
       ]
     },
@@ -163,8 +163,8 @@
         },
         {
           "surface": "owner-agent",
-          "target": "agent:UURescueBridge.events(after) -> shadow cursor resume",
-          "test": "agent/test/uurescue-bridge.test.mjs"
+          "target": "agent:ActionCliBridge.events(after) -> shadow cursor resume",
+          "test": "agent/test/action-cli-bridge.test.mjs"
         }
       ]
     },
@@ -181,7 +181,12 @@
           "task_id": { "type": "string", "minLength": 1 },
           "reason": { "type": "string", "minLength": 1 },
           "confirmation_mode": { "type": "string", "enum": ["explicit", "biometric", "system"] },
-          "request_key": { "type": "string", "minLength": 1 }
+          "request_key": { "type": "string", "minLength": 1 },
+          "action_id": {
+            "type": "string",
+            "default": "checkpoint.create",
+            "description": "Action the owner should confirm. Must be declared in the target machine's capabilities; defaults to the checkpoint write."
+          }
         }
       },
       "output_schema": {
@@ -222,7 +227,7 @@
         {
           "surface": "owner-agent",
           "target": "agent:command shadow_challenge -> uu-rescue action run checkpoint.challenge",
-          "test": "agent/test/uurescue-bridge.test.mjs"
+          "test": "agent/test/action-cli-bridge.test.mjs"
         }
       ]
     },
@@ -285,7 +290,7 @@
         {
           "surface": "owner-agent",
           "target": "agent:command shadow_execute -> uu-rescue action run checkpoint.create",
-          "test": "agent/test/uurescue-bridge.test.mjs"
+          "test": "agent/test/action-cli-bridge.test.mjs"
         }
       ]
     }

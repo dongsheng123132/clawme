@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { ShadowWorker } from "../src/shadow-worker.mjs";
-import { UuRescueBridge } from "../src/uurescue-bridge.mjs";
+import { ActionCliBridge } from "../src/action-cli-bridge.mjs";
 
 const ACTOR = { id: "ios-1", kind: "device", surface: "ios" };
 
@@ -29,17 +29,19 @@ const EXECUTE_ENVELOPE = {
 function recordingRunner(observed, outcomes) {
   return async (_executable, args) => {
     const actionId = args[args.indexOf("run") + 1];
-    const file = args[args.indexOf("--input-file") + 1];
+    const flag = args.includes("--input-file") ? "--input-file" : "-InputFile";
+    const file = args[args.indexOf(flag) + 1];
     observed.push({ actionId, args, file, input: JSON.parse(readFileSync(file, "utf8")) });
     return { code: 0, stderr: "", stdout: `${JSON.stringify(outcomes[actionId])}\n` };
   };
 }
 
-function makeBridge(runner) {
-  return new UuRescueBridge({
+function makeBridge(runner, provider = "uu-rescue") {
+  return new ActionCliBridge({
     cwd: process.cwd(),
     taskId: "owner-task",
     cliPath: "C:\\tools\\uu-rescue.js",
+    provider,
     runner,
   });
 }
@@ -150,6 +152,50 @@ test("a redelivered command reproduces the exact fingerprint the ledger keys on"
   assert.equal(observed[0].input.expires_at, "2026-07-26T03:00:00.000Z");
   assert.equal(observed[0].input.confirmed_at, "2026-07-26T02:58:00.000Z");
   assert.equal(observed[0].input.execution_id, "clawme-exec-1");
+});
+
+test("status and events go through the generic actions, not provider commands", async () => {
+  const observed = [];
+  const bridge = makeBridge(recordingRunner(observed, {
+    "task.status": {
+      ok: true,
+      data: { task: { id: "owner-task", title: "重构登录", state: "ready" }, next: "跑测试" },
+    },
+    "task.events": {
+      ok: true,
+      data: { delta: { protocol: "action-parity/sync@0.1", payload: { cursor: "uur1.3" } } },
+    },
+  }));
+
+  const status = await bridge.status();
+  const delta = await bridge.events("uur1.1");
+
+  assert.deepEqual(observed.map((entry) => entry.actionId), ["task.status", "task.events"]);
+  assert.equal(status.task_id, "owner-task");
+  assert.equal(status.state, "ready");
+  assert.equal(status.next_step, "跑测试");
+  assert.deepEqual(observed[1].input, { task: "owner-task", limit: 100, after: "uur1.1" });
+  assert.equal(delta.payload.cursor, "uur1.3");
+});
+
+test("another provider's CLI dialect is honoured, not assumed", async () => {
+  const observed = [];
+  // Open365 answers {ok, output} behind -Json; UURescue answers {ok, data}
+  // behind --json. Same Action IDs, different wire.
+  const bridge = makeBridge(recordingRunner(observed, {
+    "task.status": {
+      protocol: "action-parity/core@0.1",
+      ok: true,
+      output: { task: { id: "owner-task", title: "Open365 任务", state: "ready" } },
+    },
+  }), "open365");
+
+  const status = await bridge.status();
+
+  assert.ok(observed[0].args.includes("-Json"), "must use the PowerShell flag convention");
+  assert.ok(observed[0].args.includes("-InputFile"));
+  assert.ok(!observed[0].args.includes("--json"));
+  assert.equal(status.title, "Open365 任务", "the payload key differs and must be read per dialect");
 });
 
 test("a failed action still comes back as a projectable envelope", async () => {

@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { RelayClient } from "./relay-client.mjs";
 import { CodexAdapter } from "./codex-adapter.mjs";
 import { ShadowWorker } from "./shadow-worker.mjs";
-import { UuRescueBridge } from "./uurescue-bridge.mjs";
+import { ActionCliBridge } from "./action-cli-bridge.mjs";
 
 function usage() {
   console.log(`
@@ -61,10 +61,11 @@ if (command === "shadow") {
     console.error("shadow 模式缺少 CLAWME_UU_RESCUE_BIN");
     process.exit(1);
   }
-  const bridge = new UuRescueBridge({
+  const bridge = new ActionCliBridge({
     cwd,
     taskId: process.env.CLAWME_UU_RESCUE_TASK_ID,
     cliPath,
+    provider: process.env.CLAWME_ACTION_PROVIDER || "uu-rescue",
   });
   await bridge.status(); // discovers the current task when none was configured
   const ownerTaskId = bridge.taskId;
