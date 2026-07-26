@@ -221,7 +221,7 @@
         },
         {
           "surface": "owner-agent",
-          "target": "agent:command shadow_challenge -> uu-rescue sync-challenge",
+          "target": "agent:command shadow_challenge -> uu-rescue action run checkpoint.challenge",
           "test": "agent/test/uurescue-bridge.test.mjs"
         }
       ]
@@ -284,7 +284,7 @@
         },
         {
           "surface": "owner-agent",
-          "target": "agent:command shadow_execute -> uu-rescue sync-command",
+          "target": "agent:command shadow_execute -> uu-rescue action run checkpoint.create",
           "test": "agent/test/uurescue-bridge.test.mjs"
         }
       ]
