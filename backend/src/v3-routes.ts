@@ -225,6 +225,7 @@ export function installV3Routes(app: Express, store: V3Store): void {
         actor: shadowActor(identity),
         reason: req.body?.reason,
         confirmationMode: req.body?.confirmation_mode,
+        actionId: req.body?.action_id,
         requestKey: req.headers["idempotency-key"],
       });
       res.status(queued.created ? 202 : 200).json({

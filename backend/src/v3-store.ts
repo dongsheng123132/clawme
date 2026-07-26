@@ -22,9 +22,10 @@ import {
   normalizeMode,
   normalizeReason,
   normalizeRequestKey,
+  ownerStreamId,
   ownerTaskId,
+  resolveActionId,
   ShadowError,
-  SHADOW_ACTION,
   SHADOW_PROTOCOL,
   taskStatusFromOwnerEvent,
   validateChallengeResult,
@@ -423,9 +424,12 @@ export class V3Store {
     reason: unknown;
     confirmationMode: unknown;
     requestKey: unknown;
+    actionId?: unknown;
   }): { command: AgentCommand; created: boolean } {
     const task = this.getTask(input.taskId);
     if (!task) throw new ShadowError("task_not_found", "Task not found", 404);
+    const machine = this.data.machines.find((item) => item.id === task.machineId);
+    const actionId = resolveActionId(input.actionId, machine);
     const reason = normalizeReason(input.reason);
     const confirmationMode = normalizeMode(input.confirmationMode);
     const requestKey = normalizeRequestKey(input.requestKey);
@@ -440,6 +444,7 @@ export class V3Store {
       if (
         previousInput?.reason !== reason
         || existing.payload.confirmation_mode !== confirmationMode
+        || existing.payload.action_id !== actionId
       ) {
         throw new ShadowError(
           "idempotency_key_reused",
@@ -456,8 +461,9 @@ export class V3Store {
       type: "shadow_challenge",
       payload: {
         request_key: requestKey,
-        action_id: SHADOW_ACTION,
+        action_id: actionId,
         owner_task_id: ownerTaskId(task),
+        stream_id: ownerStreamId(task),
         actor: input.actor,
         confirmation_mode: confirmationMode,
         input: { reason },
@@ -467,7 +473,7 @@ export class V3Store {
       type: "sync.challenge.requested",
       data: {
         request_id: command.id,
-        action_id: SHADOW_ACTION,
+        action_id: actionId,
         reason,
         confirmation_mode: confirmationMode,
         actor_id: input.actor.id,
@@ -538,7 +544,7 @@ export class V3Store {
       data: {
         request_id: challengeRequest.id,
         command_id: command.id,
-        action_id: SHADOW_ACTION,
+        action_id: challengeRequest.payload.action_id,
         actor_id: input.actor.id,
       },
     });
@@ -618,7 +624,7 @@ export class V3Store {
   ): { imported: number; cursor: string; hasMore: boolean } {
     const task = this.getTask(taskId);
     if (!task) throw new ShadowError("task_not_found", "Task not found", 404);
-    const expectedStream = `uu-rescue:task:${ownerTaskId(task)}`;
+    const expectedStream = ownerStreamId(task);
     if (
       envelope.protocol !== SHADOW_PROTOCOL
       || envelope.type !== "sync.delta"

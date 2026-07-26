@@ -277,6 +277,9 @@ test("controller confirmation crosses the owner boundary and returns as a task d
     await new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+    // The store keeps a backup beside the main file, so drain the save chain
+    // before removing the directory or the delete races the next write.
+    await store.flush();
     await rm(dir, { recursive: true, force: true });
   }
 });

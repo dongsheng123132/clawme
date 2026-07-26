@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { ClawMeIdentity } from "./auth.js";
-import type { AgentCommand, DutyTask, TaskStatus } from "./v3-types.js";
+import type { AgentCommand, DutyTask, Machine, TaskStatus } from "./v3-types.js";
 
 export const SHADOW_PROTOCOL = "action-parity/sync@0.1";
 export const SHADOW_ACTION = "checkpoint.create";
+export const LEGACY_SHADOW_CAPABILITY = "shadowcore-owner";
 export const SHADOW_MODES = new Set(["explicit", "biometric", "system"]);
 
 export class ShadowError extends Error {
@@ -35,12 +36,41 @@ export function shadowActor(identity: ClawMeIdentity): ShadowActor {
 export function ownerTaskId(task: DutyTask): string {
   const configured = task.metadata?.owner_task_id;
   if (typeof configured === "string" && configured.trim()) return configured;
-  if (task.provider === "uu-rescue") return task.id;
-  throw new ShadowError(
-    "shadow_action_unavailable",
-    "This task is not connected to a UURescue action core",
-    409,
-  );
+  return task.id;
+}
+
+/** The owner's event stream for this task. The provider names it, not the relay. */
+export function ownerStreamId(task: DutyTask): string {
+  return `${task.provider}:task:${ownerTaskId(task)}`;
+}
+
+/**
+ * The relay routes an action; it never decides that one exists. A machine only
+ * receives actions its agent declared, which is what stops this from becoming a
+ * second implementation of anyone's action core.
+ */
+export function resolveActionId(value: unknown, machine: Machine | undefined): string {
+  const actionId = value === undefined || value === null ? SHADOW_ACTION : value;
+  if (typeof actionId !== "string" || !/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(actionId)) {
+    throw new ShadowError("invalid_action_id", "action_id is not a valid Action ID");
+  }
+  if (!machine) {
+    throw new ShadowError("machine_not_found", "This task's machine is not registered", 409);
+  }
+  // Agents on customer machines upgrade later than the relay. One that only
+  // declares the legacy ShadowCore capability keeps its checkpoint action;
+  // anything beyond that has to be declared explicitly.
+  const declared = machine.capabilities.includes(actionId)
+    || (actionId === SHADOW_ACTION && machine.capabilities.includes(LEGACY_SHADOW_CAPABILITY));
+  if (!declared) {
+    throw new ShadowError(
+      "shadow_action_unavailable",
+      `${machine.id} does not declare ${actionId}`,
+      409,
+      { declared: machine.capabilities },
+    );
+  }
+  return actionId;
 }
 
 export function normalizeReason(value: unknown): string {
@@ -106,8 +136,7 @@ export function validateChallengeResult(
   const actor = record(challenge.actor, "challenge.actor");
   const expectedActor = record(expected.actor, "command.actor");
   if (
-    challenge.action_id !== SHADOW_ACTION
-    || challenge.action_id !== expected.action_id
+    challenge.action_id !== expected.action_id
     || actor.id !== expectedActor.id
     || actor.kind !== expectedActor.kind
     || (actor.surface ?? null) !== (expectedActor.surface ?? null)
@@ -154,11 +183,11 @@ export function buildCheckpointCommand(
   return {
     protocol: SHADOW_PROTOCOL,
     type: "sync.command",
-    stream_id: `uu-rescue:task:${challengeRequest.payload.owner_task_id}`,
+    stream_id: challengeRequest.payload.stream_id,
     message_id: randomUUID(),
     sent_at: new Date().toISOString(),
     payload: {
-      action_id: SHADOW_ACTION,
+      action_id: challengeRequest.payload.action_id,
       execution_id: `clawme-${randomUUID()}`,
       idempotency_key: `clawme:${challengeRequest.id}`,
       actor: challengeRequest.payload.actor,
