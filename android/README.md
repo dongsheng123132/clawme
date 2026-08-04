@@ -113,10 +113,23 @@ App 默认走 SSE；连接断了自动退回轮询，游标不变，所以两条
 cd backend && node scripts/bandwidth-benchmark.mjs
 ```
 
+## 连接活过界面
+
+同步循环在进程级的 `ShadowRepository` 里，由 `ShadowSyncService`（前台服务）托着，
+所以 App 退到后台连接照样活着。owner 发来确认挑战时，手机会弹一条高优先级通知，
+标题就是要确认的 Action ID。
+
+选前台服务而不是 FCM 是有意的：FCM 需要 Google Play 服务（国产 Android 大多不带）
+和 Firebase 凭据（自建用户拿不到）。代价是通知栏常驻一块牌子——它被压到
+`IMPORTANCE_MIN` 并落在系统的「静默」区，同时顺便显示当前是推送还是轮询、收了多少字节。
+
+通知只说「要确认什么」，**确认本身必须回到 App 里做**——那里才有动作、状态版本、
+有效期和生物识别。
+
 ## 还没做的
 
-- [ ] FCM 推送唤醒。SSE 只在 App 前台时有效；被系统杀掉之后的唤醒需要
-      Firebase 凭据（`google-services.json` + service account），拿不到就做不了
+- [ ] FCM 推送唤醒。前台服务已经覆盖了绝大多数情况；FCM 解决的是服务也被系统
+      杀掉之后的唤醒，需要 Firebase 凭据（`google-services.json` + service account）
 - [ ] 二维码扫码配对。配对码已经能用了，摄像头扫码要引 CameraX + ML Kit，
       而且没有真机测不了
 - [ ] UiAutomator 用例（`testTagsAsResourceId` 已开，标识对外部自动化可见）
