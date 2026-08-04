@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  明文 HTTP 策略。
+
+  Android 9 起平台默认禁止明文流量，所以 ShadowRelayClient.normalizeBase 里那份
+  "本机地址允许 HTTP" 的白名单原本是一句空话 —— 代码放行了，平台照样拒发。在
+  模拟器上真跑一次才暴露出来：Cleartext HTTP traffic to 10.0.2.2 not permitted。
+
+  这里只对回环和模拟器宿主别名放行，其余一律维持平台默认的拒绝。名单必须与
+  ShadowRelayClient.LOCAL_HOSTS 逐字一致，由 backend/test/action-parity.test.mjs
+  守着 —— 一份事实存在两处就会漂移两处。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

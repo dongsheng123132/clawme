@@ -152,6 +152,42 @@ test("Android 的 testTag 对外部自动化可见，而不只在 Compose 测试
   );
 });
 
+test("Android 的明文白名单在代码和平台配置里是同一份", () => {
+  // 这条测试来自一次真机复现：normalizeBase 放行了 10.0.2.2 的明文 HTTP，
+  // 但 Android 9 起平台默认拒发，App 上抛的是
+  // "Cleartext HTTP traffic to 10.0.2.2 not permitted"。
+  // 代码放行而平台不放行，等于白名单是一句空话；两份名单必须同时改。
+  const client = read("android/protocol/src/main/kotlin/net/clawme/shadow/protocol/ShadowRelayClient.kt");
+  const netConfig = read("android/app/src/main/res/xml/network_security_config.xml");
+  const manifest = read("android/app/src/main/AndroidManifest.xml");
+
+  assert.ok(
+    manifest.includes('android:networkSecurityConfig="@xml/network_security_config"'),
+    "AndroidManifest 必须挂上 network security config，否则配置根本不生效",
+  );
+  assert.ok(
+    /<base-config\s+cleartextTrafficPermitted="false"\s*\/>/.test(netConfig),
+    "默认必须拒绝明文，只对个别地址开口",
+  );
+
+  const inCode = new Set(
+    /LOCAL_HOSTS\s*=\s*setOf\(([^)]*)\)/.exec(client)[1]
+      .match(/"([^"]+)"/g).map((s) => s.replace(/"/g, "")),
+  );
+  const inConfig = new Set(
+    [...netConfig.matchAll(/<domain[^>]*>([^<]+)<\/domain>/g)].map((m) => m[1].trim()),
+  );
+
+  // ::1 是 IPv6 回环，写不进 domain-config，其余必须一一对应。
+  for (const host of inCode) {
+    if (host === "::1") continue;
+    assert.ok(inConfig.has(host), `network security config 里缺少 ${host}`);
+  }
+  for (const host of inConfig) {
+    assert.ok(inCode.has(host), `ShadowRelayClient.LOCAL_HOSTS 里没有 ${host}，配置放宽过头了`);
+  }
+});
+
 test("Android 确认界面显示动作、状态版本和有效期后才提交", () => {
   // 与 iOS 同一条要求：确认绑定到具体动作，而不是一句"确定吗？"
   assert.ok(sources.android.includes("challenge.actionId"));
