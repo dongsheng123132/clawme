@@ -71,8 +71,27 @@ npm prune --production
 # --- 5. 启动后端 ---
 echo "[5/6] 启动后端..."
 cd "$APP_DIR"
+
+# 令牌。这一步不能省：第 6 步会把这个 relay 挂到一条公网 Cloudflare 隧道上，
+# 而 relay 在没有凭据时会拒绝启动（旧版本是"没配置就全部放行"，配上公网隧道
+# 等于开门迎客——真发生过）。
+TOKEN_FILE="/etc/clawme/token"
+mkdir -p /etc/clawme
+if [ -n "${CLAWME_TOKENS:-}" ]; then
+  echo "  使用环境变量里提供的 CLAWME_TOKENS"
+elif [ -s "$TOKEN_FILE" ]; then
+  CLAWME_TOKENS="$(cat "$TOKEN_FILE")"
+  echo "  沿用已有令牌（$TOKEN_FILE）"
+else
+  CLAWME_TOKENS="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  printf '%s' "$CLAWME_TOKENS" > "$TOKEN_FILE"
+  chmod 600 "$TOKEN_FILE"
+  echo "  已生成新令牌并写入 $TOKEN_FILE（权限 600）"
+fi
+export CLAWME_TOKENS
+
 pm2 delete clawme-backend 2>/dev/null || true
-pm2 start deploy/ecosystem.config.cjs
+pm2 start deploy/ecosystem.config.cjs --update-env
 pm2 save
 pm2 startup systemd -u root --hp /root 2>/dev/null || true
 
@@ -104,11 +123,14 @@ if curl -s http://127.0.0.1:31871/health | grep -q '"ok":true'; then
   echo ""
   echo "  连接 OpenClaw："
   echo "    baseUrl:     ${TUNNEL_URL:-https://xxx.trycloudflare.com}"
-  echo "    clientToken: test  (或修改 ecosystem.config.cjs 设置 CLAWME_TOKENS)"
+  echo "    clientToken: ${CLAWME_TOKENS}"
   echo ""
-  echo "  连接浏览器插件 / PWA："
+  echo "  连接浏览器插件 / PWA / 手机端："
   echo "    Backend URL: ${TUNNEL_URL:-https://xxx.trycloudflare.com}"
-  echo "    Token:       test"
+  echo "    Token:       ${CLAWME_TOKENS}"
+  echo ""
+  echo "  ⚠ 这个令牌就是这台 relay 的全部门禁。它能给你的浏览器和手机下发指令，"
+  echo "    请当成密码保管；泄露了就重跑本脚本前先删掉 ${TOKEN_FILE}。"
   echo ""
   echo "  管理命令："
   echo "    pm2 status          # 查看状态"

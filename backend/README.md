@@ -8,7 +8,9 @@ Relay 负责设备心跳、任务事件、待处理授权、手机决定和离�
 | 变量 | 说明 |
 |------|------|
 | `PORT` | 端口，默认 31871 |
-| `CLAWME_TOKENS` | 逗号分隔的合法 client_token；不设则开发时允许任意 token |
+| `CLAWME_TOKENS` | 逗号分隔的合法 client_token。**与 `CLAWME_IDENTITIES` 二者必居其一，都不设 relay 会拒绝启动** |
+| `CLAWME_ALLOW_ANY_TOKEN` | 设为 `1` 才放行任意 token，且只允许绑定回环地址。仅供本机开发 |
+| `CLAWME_BIND` | 监听地址，默认 `127.0.0.1`。要直接对外暴露才改 |
 | `CLAWME_IDENTITIES` | 生产用 token→actor/role/机器绑定 JSON；设置后取代 `CLAWME_TOKENS` |
 | `CLAWME_DATA_FILE` | v0.3 持久化文件，默认 `data/clawme-v3.json` |
 | `OPENCLAW_HOOK_URL` | 回传用，如 `http://127.0.0.1:18789` |

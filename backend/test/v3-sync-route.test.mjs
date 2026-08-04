@@ -8,6 +8,11 @@ import { installV3Routes } from "../dist/v3-routes.js";
 import { V3Store } from "../dist/v3-store.js";
 
 test("the relay exposes snapshot and delta over the existing authenticated HTTP API", async () => {
+  // The relay fails closed with no credentials configured, so this test states
+  // its own. It used to pass by riding the old "unconfigured means allow
+  // everyone" default — the very behaviour that left a public deployment open.
+  const previousTokens = process.env.CLAWME_TOKENS;
+  process.env.CLAWME_TOKENS = "test-token";
   const dir = await mkdtemp(join(tmpdir(), "clawme-sync-route-"));
   const store = new V3Store(join(dir, "relay.json"));
   await store.load();
@@ -61,6 +66,12 @@ test("the relay exposes snapshot and delta over the existing authenticated HTTP 
     await new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+    await store.flush().catch(() => {});
     await rm(dir, { recursive: true, force: true });
+    if (previousTokens === undefined) {
+      delete process.env.CLAWME_TOKENS;
+    } else {
+      process.env.CLAWME_TOKENS = previousTokens;
+    }
   }
 });

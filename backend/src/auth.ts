@@ -77,14 +77,41 @@ export function getTokenFromRequest(req: { headers: Record<string, string | stri
   return null;
 }
 
-/** Validate token against allowed list (env CLAWME_TOKENS, comma-separated). */
+/**
+ * True when this relay has no credentials configured at all.
+ *
+ * A relay in this state cannot authenticate anyone, so it refuses everyone.
+ * It used to accept everyone — convenient on a laptop, catastrophic the moment
+ * the same build sits behind a public tunnel, which is exactly what happened to
+ * one deployment: any invented token got HTTP 200 from the open internet.
+ * "Insecure unless configured" is not a default anybody opts into knowingly.
+ */
+export function isUnconfigured(): boolean {
+  return !process.env.CLAWME_IDENTITIES?.trim() && !tokenList().length;
+}
+
+function tokenList(): string[] {
+  return (process.env.CLAWME_TOKENS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Validate token against the allow-list (env CLAWME_TOKENS, comma-separated)
+ * or the identity map (env CLAWME_IDENTITIES).
+ *
+ * With neither configured the relay fails closed. Local development that
+ * genuinely wants an open relay has to say so out loud with
+ * CLAWME_ALLOW_ANY_TOKEN=1, which `npm start` refuses to combine with a
+ * non-loopback bind.
+ */
 export function isTokenAllowed(token: string | null): boolean {
   if (!token) return false;
   const identity = configuredIdentity(token);
   if (identity !== undefined) return identity !== null;
-  const allowed = process.env.CLAWME_TOKENS ?? "";
-  const list = allowed.split(",").map((s) => s.trim()).filter(Boolean);
-  if (list.length === 0) return true; // no env = allow any (dev)
+  const list = tokenList();
+  if (list.length === 0) return process.env.CLAWME_ALLOW_ANY_TOKEN === "1";
   return list.includes(token);
 }
 

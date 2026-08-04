@@ -22,7 +22,8 @@ store/            Chrome Web Store assets and listing content
 - Express server, TypeScript, in-memory store (no database)
 - Auth: `X-ClawMe-Token` header or `Authorization: Bearer <token>`
 - Endpoints: `POST /v1/instructions`, `GET /v1/instructions/pending?target=browser`, `POST /v1/instructions/:id/result`, `POST /v1/messages`
-- Tokens configured via `CLAWME_TOKENS` env var (comma-separated) or defaults to `"test"`
+- Tokens configured via `CLAWME_TOKENS` (comma-separated) or `CLAWME_IDENTITIES` (token→actor/role/machine JSON). **The relay refuses to start with neither** — it used to accept any token when unconfigured, which left a tunnelled deployment open to the internet. Local dev that wants an open relay must set `CLAWME_ALLOW_ANY_TOKEN=1`, and that mode only binds loopback.
+- Binds `127.0.0.1` by default; set `CLAWME_BIND` to expose it directly
 - Relays results to OpenClaw via `OPENCLAW_CALLBACK_URL`
 - Build: `npm run build` (tsc), Run: `npm start`
 
