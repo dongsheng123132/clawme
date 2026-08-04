@@ -24,6 +24,12 @@ const sources = {
     read("ios/ClawMe/Views/ShadowCoreView.swift"),
     read("ios/ClawMe/Services/ConnectionManager.swift"),
   ].join("\n"),
+  android: [
+    read("android/app/src/main/java/net/clawme/shadow/ui/ShadowCoreScreen.kt"),
+    read("android/app/src/main/java/net/clawme/shadow/ShadowAuthenticator.kt"),
+    read("android/protocol/src/main/kotlin/net/clawme/shadow/protocol/ShadowRelayClient.kt"),
+    read("android/protocol/src/main/kotlin/net/clawme/shadow/protocol/ShadowProjection.kt"),
+  ].join("\n"),
   agent: [
     read("agent/src/shadow-worker.mjs"),
     read("agent/src/action-cli-bridge.mjs"),
@@ -102,6 +108,70 @@ test("ios bindings exist —— 原生影子的绑定标识真实存在", () => 
     assert.ok(
       sources.ios.includes(`func ${member}`) || sources.ios.includes(`${type}.${member}`),
       `${action.id}: Swift 源码里找不到投影入口 ${symbol[1]}`,
+    );
+  }
+});
+
+test("android bindings exist —— 原生影子的绑定标识真实存在", () => {
+  for (const action of manifest.actions) {
+    const binding = action.bindings.find((item) => item.surface === "android");
+    assert.ok(binding, `${action.id} 缺少 Android 绑定`);
+
+    const identifier = /^android:testTag=(\S+)$/.exec(binding.target);
+    if (identifier) {
+      // 两步查：常量得定义成这个字面量，而且真的被 testTag() 用上了。
+      // 只查字面量会漏掉"标识还在、按钮上却忘了挂"这种最容易发生的漂移。
+      const declared = new RegExp(
+        `const val (\\w+)\\s*=\\s*"${identifier[1].replace(/\./g, "\\.")}"`,
+      ).exec(sources.android);
+      assert.ok(declared, `${action.id}: Kotlin 源码里找不到 testTag 常量 ${identifier[1]}`);
+      assert.ok(
+        sources.android.includes(`testTag(ShadowTestTags.${declared[1]})`),
+        `${action.id}: ${identifier[1]} 定义了但没挂到任何控件上`,
+      );
+      continue;
+    }
+
+    // 投影类绑定（没有按钮，是代码里的同步入口）只需符号存在
+    const symbol = /^android:(\w+)\.(\w+)/.exec(binding.target);
+    assert.ok(symbol, `无法解析 Android 绑定：${binding.target}`);
+    const [, type, member] = symbol;
+    assert.ok(
+      sources.android.includes(`fun ${member}`) || sources.android.includes(`${type}.${member}`),
+      `${action.id}: Kotlin 源码里找不到投影入口 ${type}.${member}`,
+    );
+  }
+});
+
+test("Android 的 testTag 对外部自动化可见，而不只在 Compose 测试里可见", () => {
+  // 少了这一行，testTag 不会变成 resource-id，UiAutomator 就查不到这个按钮
+  // 绑的是哪个动作 —— 那 Android 的绑定就退化成了自说自话。
+  assert.ok(
+    sources.android.includes("testTagsAsResourceId = true"),
+    "Compose 根节点必须开启 testTagsAsResourceId，标识才能被机器检查",
+  );
+});
+
+test("Android 确认界面显示动作、状态版本和有效期后才提交", () => {
+  // 与 iOS 同一条要求：确认绑定到具体动作，而不是一句"确定吗？"
+  assert.ok(sources.android.includes("challenge.actionId"));
+  assert.ok(sources.android.includes("challenge.expectedStateVersion"));
+  assert.ok(sources.android.includes("challenge.expiresAt"));
+});
+
+test("两个原生影子声明的动作标识逐字相同", () => {
+  // iOS 和 Android 各自原生，但"这个按钮绑的是哪个动作"必须是同一个答案。
+  for (const action of manifest.actions) {
+    const ios = action.bindings.find((item) => item.surface === "ios")?.target;
+    const android = action.bindings.find((item) => item.surface === "android")?.target;
+    const iosTag = /^ios:accessibilityIdentifier=(\S+)$/.exec(ios ?? "");
+    const androidTag = /^android:testTag=(\S+)$/.exec(android ?? "");
+    if (!iosTag && !androidTag) continue;
+    assert.ok(iosTag && androidTag, `${action.id}: 一端有控件标识、另一端没有`);
+    assert.equal(
+      androidTag[1],
+      iosTag[1],
+      `${action.id}: iOS 与 Android 的动作标识漂移了`,
     );
   }
 });

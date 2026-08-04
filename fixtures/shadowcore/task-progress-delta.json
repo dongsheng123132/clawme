@@ -1,0 +1,41 @@
+{
+  "protocol": "action-parity/sync@0.1",
+  "type": "sync.delta",
+  "stream_id": "clawme:task:shadow-task",
+  "message_id": "message-fixture",
+  "sent_at": "2026-01-01T00:00:00.000Z",
+  "payload": {
+    "previous_cursor": "cm1.eyJ0YXNrX2lkIjoic2hhZG93LXRhc2siLCJzZXF1ZW5jZSI6MX0",
+    "cursor": "cm1.eyJ0YXNrX2lkIjoic2hhZG93LXRhc2siLCJzZXF1ZW5jZSI6M30",
+    "state_version": 3,
+    "has_more": false,
+    "events": [
+      {
+        "event_id": "event-2",
+        "sequence": 2,
+        "kind": "task.progress",
+        "occurred_at": "2026-01-01T00:00:00.000Z",
+        "entity": {
+          "type": "task",
+          "id": "shadow-task"
+        },
+        "payload": {
+          "message": "已完成 3/8 段"
+        }
+      },
+      {
+        "event_id": "event-3",
+        "sequence": 3,
+        "kind": "task.progress",
+        "occurred_at": "2026-01-01T00:00:00.000Z",
+        "entity": {
+          "type": "task",
+          "id": "shadow-task"
+        },
+        "payload": {
+          "message": "已完成 5/8 段"
+        }
+      }
+    ]
+  }
+}

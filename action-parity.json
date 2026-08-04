@@ -17,6 +17,13 @@
       "description": "Native SwiftUI shadow. Action controls carry stable accessibility identifiers so a binding can be checked without running the app."
     },
     {
+      "id": "android",
+      "kind": "gui",
+      "required_for_parity": true,
+      "test_driver": "uiautomator",
+      "description": "Native Jetpack Compose shadow. Action controls carry stable test tags exposed as resource IDs, so a binding can be checked without running the app."
+    },
+    {
       "id": "relay-api",
       "kind": "api",
       "required_for_parity": true,
@@ -90,6 +97,11 @@
           "test": "backend/test/action-parity.test.mjs:ios bindings exist"
         },
         {
+          "surface": "android",
+          "target": "android:ShadowRelayClient.sync -> ShadowProjection.apply",
+          "test": "android/app/src/test/java/net/clawme/shadow/protocol/ShadowProjectionTest.kt"
+        },
+        {
           "surface": "relay-api",
           "target": "api:GET /v3/sync/tasks/:id --json",
           "test": "backend/test/v3-sync-route.test.mjs"
@@ -157,6 +169,11 @@
           "test": "backend/test/action-parity.test.mjs:ios bindings exist"
         },
         {
+          "surface": "android",
+          "target": "android:ShadowRelayClient.sync(after) -> cursor paging",
+          "test": "android/app/src/test/java/net/clawme/shadow/protocol/ShadowRelayClientTest.kt"
+        },
+        {
           "surface": "relay-api",
           "target": "api:GET /v3/sync/tasks/:id?after=<cursor>&limit=<n> --json",
           "test": "backend/test/v3-sync-route.test.mjs"
@@ -220,6 +237,11 @@
           "test": "backend/test/action-parity.test.mjs:ios bindings exist"
         },
         {
+          "surface": "android",
+          "target": "android:testTag=clawme.action.checkpoint.challenge",
+          "test": "backend/test/action-parity.test.mjs:android bindings exist"
+        },
+        {
           "surface": "relay-api",
           "target": "api:POST /v3/tasks/:id/shadow/checkpoint-challenges --json",
           "test": "backend/test/v3-shadow-route.test.mjs"
@@ -281,6 +303,11 @@
           "surface": "ios",
           "target": "ios:accessibilityIdentifier=clawme.action.checkpoint.create",
           "test": "backend/test/action-parity.test.mjs:ios bindings exist"
+        },
+        {
+          "surface": "android",
+          "target": "android:testTag=clawme.action.checkpoint.create",
+          "test": "backend/test/action-parity.test.mjs:android bindings exist"
         },
         {
           "surface": "relay-api",

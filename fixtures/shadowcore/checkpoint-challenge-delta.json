@@ -1,0 +1,66 @@
+{
+  "protocol": "action-parity/sync@0.1",
+  "type": "sync.delta",
+  "stream_id": "clawme:task:shadow-task",
+  "message_id": "message-fixture",
+  "sent_at": "2026-01-01T00:00:00.000Z",
+  "payload": {
+    "previous_cursor": "cm1.eyJ0YXNrX2lkIjoic2hhZG93LXRhc2siLCJzZXF1ZW5jZSI6M30",
+    "cursor": "cm1.eyJ0YXNrX2lkIjoic2hhZG93LXRhc2siLCJzZXF1ZW5jZSI6Nn0",
+    "state_version": 6,
+    "has_more": false,
+    "events": [
+      {
+        "event_id": "event-4",
+        "sequence": 4,
+        "kind": "command.queued",
+        "occurred_at": "2026-01-01T00:00:00.000Z",
+        "entity": {
+          "type": "task",
+          "id": "shadow-task"
+        },
+        "payload": {
+          "command_id": "request-1",
+          "command_type": "shadow_challenge"
+        }
+      },
+      {
+        "event_id": "event-5",
+        "sequence": 5,
+        "kind": "sync.challenge.requested",
+        "occurred_at": "2026-01-01T00:00:00.000Z",
+        "entity": {
+          "type": "task",
+          "id": "shadow-task"
+        },
+        "payload": {
+          "request_id": "request-1",
+          "action_id": "checkpoint.create",
+          "reason": "手机确认保存当前接班点",
+          "confirmation_mode": "biometric",
+          "actor_id": "phone-device-1"
+        }
+      },
+      {
+        "event_id": "event-6",
+        "sequence": 6,
+        "kind": "sync.challenge",
+        "occurred_at": "2026-01-01T00:00:00.000Z",
+        "entity": {
+          "type": "task",
+          "id": "shadow-task"
+        },
+        "payload": {
+          "request_id": "request-1",
+          "action_id": "checkpoint.create",
+          "reason": "手机确认保存当前接班点",
+          "confirmation_mode": "biometric",
+          "challenge_id": "challenge-owner-1",
+          "expected_state_version": 4,
+          "challenge_issued_at": "2026-01-01T00:00:00.000Z",
+          "challenge_expires_at": "2026-01-01T00:00:00.000Z"
+        }
+      }
+    ]
+  }
+}

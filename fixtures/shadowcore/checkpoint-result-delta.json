@@ -1,0 +1,66 @@
+{
+  "protocol": "action-parity/sync@0.1",
+  "type": "sync.delta",
+  "stream_id": "clawme:task:shadow-task",
+  "message_id": "message-fixture",
+  "sent_at": "2026-01-01T00:00:00.000Z",
+  "payload": {
+    "previous_cursor": "cm1.eyJ0YXNrX2lkIjoic2hhZG93LXRhc2siLCJzZXF1ZW5jZSI6Nn0",
+    "cursor": "cm1.eyJ0YXNrX2lkIjoic2hhZG93LXRhc2siLCJzZXF1ZW5jZSI6OX0",
+    "state_version": 9,
+    "has_more": false,
+    "events": [
+      {
+        "event_id": "event-7",
+        "sequence": 7,
+        "kind": "command.queued",
+        "occurred_at": "2026-01-01T00:00:00.000Z",
+        "entity": {
+          "type": "task",
+          "id": "shadow-task"
+        },
+        "payload": {
+          "command_id": "command-1",
+          "command_type": "shadow_execute"
+        }
+      },
+      {
+        "event_id": "event-8",
+        "sequence": 8,
+        "kind": "sync.command.confirmed",
+        "occurred_at": "2026-01-01T00:00:00.000Z",
+        "entity": {
+          "type": "task",
+          "id": "shadow-task"
+        },
+        "payload": {
+          "request_id": "request-1",
+          "command_id": "command-1",
+          "action_id": "checkpoint.create",
+          "actor_id": "phone-device-1"
+        }
+      },
+      {
+        "event_id": "event-9",
+        "sequence": 9,
+        "kind": "sync.result",
+        "occurred_at": "2026-01-01T00:00:00.000Z",
+        "entity": {
+          "type": "task",
+          "id": "shadow-task"
+        },
+        "payload": {
+          "request_id": "request-1",
+          "action_id": "checkpoint.create",
+          "execution_id": "execution-1",
+          "ok": true,
+          "checkpoint_id": "checkpoint-1",
+          "checkpoint_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "handoff_ref": "uu-rescue:task:owner-task-7:checkpoint:checkpoint-1",
+          "task_state": "ready",
+          "state_version": 7
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "protocol": "action-parity/sync@0.1",
+  "type": "sync.snapshot",
+  "stream_id": "clawme:task:shadow-task",
+  "message_id": "message-fixture",
+  "sent_at": "2026-01-01T00:00:00.000Z",
+  "payload": {
+    "cursor": "cm1.eyJ0YXNrX2lkIjoic2hhZG93LXRhc2siLCJzZXF1ZW5jZSI6MX0",
+    "state_version": 1,
+    "schema_version": "clawme.task@1",
+    "state": {
+      "task": {
+        "id": "shadow-task",
+        "machineId": "pc-shadow",
+        "provider": "uu-rescue",
+        "title": "Save a handoff checkpoint",
+        "status": "running",
+        "summary": "Codex 正在续写第 3 节",
+        "metadata": {
+          "owner_task_id": "owner-task-7"
+        },
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "attention": []
+    }
+  }
+}
