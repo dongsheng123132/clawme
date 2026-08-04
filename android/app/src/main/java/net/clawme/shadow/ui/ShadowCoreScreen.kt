@@ -206,8 +206,9 @@ private fun StatusCard(state: ShadowUiState, onTogglePairing: () -> Unit) {
                 )
             }
             // 省流量不是口号，是这台手机这次会话的实际收字节数。
+            // 传输方式也一起显示：推送和轮询的流量差别就在这一行里。
             Text(
-                "同步 ${state.syncCount} 次 · 实收 ${formatBytes(state.bytesReceived)}",
+                "${state.transport.label} · 同步 ${state.syncCount} 次 · 实收 ${formatBytes(state.bytesReceived)}",
                 style = MaterialTheme.typography.labelSmall,
                 fontFamily = FontFamily.Monospace,
             )

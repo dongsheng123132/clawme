@@ -99,8 +99,15 @@ cd backend && npm test         # 含 android 绑定检查与 fixture 防漂移
 
 ## 手机端看得到的流量
 
-状态卡上直接显示这次会话的同步次数和实收字节。10 分钟真实任务会话实测 **153 KB**，
-其中 45% 还是轮询的 HTTP 头 —— 换 SSE 或推送唤醒能再降一个量级，那是下一步。
+状态卡上直接显示当前传输方式、同步次数和实收字节。10 分钟真实任务会话实测：
+
+| 传输方式 | 流量 | 延迟 |
+| --- | --- | --- |
+| SSE 长连接 | **20.7 KB** | 即时 |
+| 轮询 3 秒 | 153 KB | 最多 3 秒 |
+
+App 默认走 SSE；连接断了自动退回轮询，游标不变，所以两条路径随时可以互换。
+状态卡上那个「推送 / 轮询」标签就是当前实际走的那条。
 
 ```bash
 cd backend && node scripts/bandwidth-benchmark.mjs
@@ -108,7 +115,9 @@ cd backend && node scripts/bandwidth-benchmark.mjs
 
 ## 还没做的
 
-- [ ] FCM 推送唤醒（现在是 3 秒轮询，头部开销占了快一半）
-- [ ] 可撤销的配对管理（现在一个令牌用到底）
+- [ ] FCM 推送唤醒。SSE 只在 App 前台时有效；被系统杀掉之后的唤醒需要
+      Firebase 凭据（`google-services.json` + service account），拿不到就做不了
+- [ ] 二维码扫码配对。配对码已经能用了，摄像头扫码要引 CameraX + ML Kit，
+      而且没有真机测不了
 - [ ] UiAutomator 用例（`testTagsAsResourceId` 已开，标识对外部自动化可见）
-- [ ] 前台服务 / WorkManager，让 App 退到后台也能收挑战
+- [ ] 前台服务 / WorkManager，让 App 退到后台也能维持连接

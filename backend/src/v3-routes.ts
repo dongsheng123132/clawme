@@ -249,6 +249,72 @@ export function installV3Routes(app: Express, store: V3Store): void {
     }
   });
 
+  /**
+   * 同一条游标流，改用长连接推。
+   *
+   * 轮询下 45% 的流量花在 HTTP 头上而不是内容上（backend/scripts/bandwidth-benchmark.mjs
+   * 实测）。这里语义与 GET /v3/sync/tasks/:id 完全一致 —— 一样的信封、一样的
+   * 不透明游标、一样的至少一次投递 —— 只是由 relay 在有变化时推给你，而不是你
+   * 每三秒问一次。断线就退回轮询，游标不变，不需要第二套恢复规则。
+   */
+  app.get("/v3/sync/tasks/:id/stream", (req, res) => {
+    if (!authorizedIdentity(req, res, ["controller"])) return;
+    const task = store.getTask(req.params.id);
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      // Nginx 之类的反向代理默认会缓冲，缓冲了就不叫推送了。
+      "X-Accel-Buffering": "no",
+    });
+
+    let cursor = req.query.after ? String(req.query.after) : undefined;
+    let closed = false;
+    let sending = false;
+
+    const flush = () => {
+      // 事件可能成串到达；同一时刻只跑一次，把能取的一次取完。
+      if (closed || sending) return;
+      sending = true;
+      try {
+        for (let page = 0; page < 20; page += 1) {
+          const envelope = store.syncTask(req.params.id, cursor, 100);
+          if (!envelope) break;
+          cursor = envelope.payload.cursor;
+          res.write(`event: sync\ndata: ${JSON.stringify(envelope)}\n\n`);
+          if (!("has_more" in envelope.payload) || envelope.payload.has_more !== true) break;
+        }
+      } catch (error) {
+        const code = error instanceof SyncCursorError ? error.code : "stream_failed";
+        res.write(`event: error\ndata: ${JSON.stringify({ error: code })}\n\n`);
+        closed = true;
+        res.end();
+      } finally {
+        sending = false;
+      }
+    };
+
+    // 先把游标之后欠的补齐，再进入等待 —— 否则连接建立瞬间发生的事件会漏掉。
+    flush();
+    const unsubscribe = store.subscribe(req.params.id, flush);
+
+    // 空闲连接会被中间设备静默掐断，注释行是 SSE 规定的保活方式。
+    const heartbeat = setInterval(() => {
+      if (!closed) res.write(": keep-alive\n\n");
+    }, 25_000);
+
+    const stop = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(heartbeat);
+      unsubscribe();
+    };
+    req.on("close", stop);
+    res.on("close", stop);
+  });
+
   app.post("/v3/tasks/:id/events", (req, res) => {
     const identity = authorizedIdentity(req, res, ["owner"]);
     if (!identity) return;

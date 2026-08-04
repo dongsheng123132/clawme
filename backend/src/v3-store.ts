@@ -66,6 +66,9 @@ export class V3Store {
   private saveChain: Promise<void> = Promise.resolve();
   private lastPersistError: Error | undefined;
 
+  /** taskId → 正在等这条流的 SSE 连接。 */
+  private readonly listeners = new Map<string, Set<() => void>>();
+
   constructor(private readonly filePath = process.env.CLAWME_DATA_FILE ?? "data/clawme-v3.json") {}
 
   private get tempPath(): string {
@@ -266,7 +269,41 @@ export class V3Store {
       task.updatedAt = event.createdAt;
     }
     this.persist();
+    this.notifyTask(taskId);
     return event;
+  }
+
+  /**
+   * 订阅某个任务的事件产生。
+   *
+   * 这是给 SSE 流用的：手机不必每三秒问一次"有新东西吗"，relay 有了就推。
+   * 回调只说"这条流动了"，不带内容 —— 订阅者拿着自己的游标去取，于是断线重连、
+   * 慢消费者和多设备各自的进度都还是同一套游标语义，不需要第二条规则。
+   */
+  subscribe(taskId: string, listener: () => void): () => void {
+    let set = this.listeners.get(taskId);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(taskId, set);
+    }
+    set.add(listener);
+    return () => {
+      set!.delete(listener);
+      if (set!.size === 0) this.listeners.delete(taskId);
+    };
+  }
+
+  /** 订阅者抛错不能影响写入路径：事件已经落定了，通知失败是通知的事。 */
+  private notifyTask(taskId: string): void {
+    const set = this.listeners.get(taskId);
+    if (!set) return;
+    for (const listener of [...set]) {
+      try {
+        listener();
+      } catch (error) {
+        console.error("[clawme] 事件订阅者抛错：", error);
+      }
+    }
   }
 
   listEvents(taskId: string): TaskEvent[] {

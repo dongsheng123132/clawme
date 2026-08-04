@@ -20,12 +20,20 @@ import net.clawme.shadow.protocol.ShadowProjection
 import net.clawme.shadow.protocol.ShadowRelayClient
 import net.clawme.shadow.protocol.ShadowRelayException
 import net.clawme.shadow.protocol.ShadowState
+import net.clawme.shadow.protocol.SyncEnvelope
+
+/** 当前用哪条路收变化。界面上直接显示，因为这决定了流量和延迟。 */
+enum class Transport(val label: String) {
+    STREAM("推送"),
+    POLLING("轮询"),
+}
 
 data class ShadowUiState(
     val relayUrl: String = "",
     val taskId: String = "",
     val hasToken: Boolean = false,
     val connected: Boolean = false,
+    val transport: Transport = Transport.POLLING,
     val shadow: ShadowState = ShadowState(),
     val busyRequests: Set<String> = emptySet(),
     /** 会话内的同步次数与实收字节 —— 界面上直接显示，「省流量」不靠嘴说。 */
@@ -152,9 +160,34 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
         pollJob?.cancel()
         pollJob = viewModelScope.launch {
             while (isActive) {
+                // 先试长连接：relay 有变化才发，省掉每三秒一次的请求头。
+                val streamed = runCatching { streamLoop() }
+                if (!isActive) break
+                if (streamed.isFailure) {
+                    _state.value = _state.value.copy(
+                        transport = Transport.POLLING,
+                        connected = false,
+                        error = null, // 流断掉是常态，不该弹给用户看
+                    )
+                }
+                // 流断开期间照样要追上进度，游标不变所以两条路可以随时互换。
                 syncOnce()
                 delay(POLL_INTERVAL_MS)
             }
+        }
+    }
+
+    /** 阻塞在 IO 线程上读流，直到断开或被取消。 */
+    private suspend fun streamLoop() {
+        val client = client() ?: return
+        val taskId = _state.value.taskId
+        withContext(Dispatchers.IO) {
+            client.streamSync(
+                taskId = taskId,
+                after = _state.value.shadow.cursor(taskId),
+                isActive = { isActive },
+                onEnvelope = { envelope, bytes -> applyEnvelope(taskId, envelope, bytes, Transport.STREAM) },
+            )
         }
     }
 
@@ -231,6 +264,27 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** 把一个信封投影进界面状态并推进游标。流和轮询共用这一条路径。 */
+    private fun applyEnvelope(
+        taskId: String,
+        envelope: SyncEnvelope,
+        bytes: Int,
+        transport: Transport,
+    ) {
+        val current = _state.value
+        val projected = ShadowProjection.apply(current.shadow, envelope, taskId)
+        settings.saveCursor(taskId, envelope.payload.cursor)
+        _state.value = current.copy(
+            shadow = projected,
+            connected = true,
+            transport = transport,
+            syncCount = current.syncCount + 1,
+            bytesReceived = current.bytesReceived + bytes,
+            message = "${envelope.type} · v${envelope.payload.stateVersion}",
+            error = null,
+        )
+    }
+
     /** 拉一轮增量，has_more 时继续翻页，直到追平或到达页数上限。 */
     private suspend fun syncOnce() {
         val client = client() ?: return
@@ -239,20 +293,10 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
             var pages = 0
             while (pages < MAX_PAGES) {
                 pages += 1
-                val current = _state.value
                 val fetch = withContext(Dispatchers.IO) {
-                    client.sync(taskId, current.shadow.cursor(taskId))
+                    client.sync(taskId, _state.value.shadow.cursor(taskId))
                 }
-                val projected = ShadowProjection.apply(current.shadow, fetch.envelope, taskId)
-                settings.saveCursor(taskId, fetch.envelope.payload.cursor)
-                _state.value = current.copy(
-                    shadow = projected,
-                    connected = true,
-                    syncCount = current.syncCount + 1,
-                    bytesReceived = current.bytesReceived + fetch.responseBytes,
-                    message = "${fetch.envelope.type} · v${fetch.envelope.payload.stateVersion}",
-                    error = null,
-                )
+                applyEnvelope(taskId, fetch.envelope, fetch.responseBytes, Transport.POLLING)
                 if (fetch.envelope.payload.hasMore != true) break
             }
         } catch (error: Exception) {

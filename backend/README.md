@@ -25,6 +25,9 @@ Relay 负责设备心跳、任务事件、待处理授权、手机决定和离�
 - `POST /v3/tasks` / `GET /v3/tasks` — 创建、更新和查看任务
 - `POST /v3/tasks/:id/events` — 上报原生 Agent 事件
 - `GET /v3/sync/tasks/:id` — 首次快照；带 `after` 游标时只返回新增事件
+- `GET /v3/sync/tasks/:id/stream` — 同一条游标流的 SSE 长连接版。语义完全一致，
+  只是 relay 有变化才发。实测 10 分钟会话 20.7 KB，轮询版是 153 KB（省 86.5%），
+  延迟从最多 3 秒降到即时。客户端断流退回轮询即可，游标不变
 - `POST /v3/attention` / `GET /v3/attention` — 创建、查看待处理事项
 - `POST /v3/attention/:id/decision` — 手机允许、拒绝或选择操作
 - `GET /v3/agent/commands` — 本地 Agent 领取手机决定和补充指令

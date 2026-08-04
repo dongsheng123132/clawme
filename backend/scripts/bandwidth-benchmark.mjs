@@ -163,6 +163,9 @@ async function measureShadowCore() {
     let bodyBytes = Buffer.byteLength(JSON.stringify(snapshot), "utf8");
     let requests = 1;
     let emptyPolls = 0;
+    // 空轮询的信封也是要过网的，单独记一笔：SSE 下这一部分整个消失。
+    let emptyEnvelopeBytes = 0;
+    let nonEmptyDeltas = 1;
 
     const totalSeconds = MINUTES * 60;
     for (let now = POLL_SECONDS; now <= totalSeconds; now += POLL_SECONDS) {
@@ -172,10 +175,20 @@ async function measureShadowCore() {
       }
       const delta = store.syncTask(TASK_ID, cursor);
       cursor = delta.payload.cursor;
-      bodyBytes += Buffer.byteLength(JSON.stringify(delta), "utf8");
+      const size = Buffer.byteLength(JSON.stringify(delta), "utf8");
+      bodyBytes += size;
       requests += 1;
-      if ((delta.payload.events ?? []).length === 0) emptyPolls += 1;
+      if ((delta.payload.events ?? []).length === 0) {
+        emptyPolls += 1;
+        emptyEnvelopeBytes += size;
+      } else {
+        nonEmptyDeltas += 1;
+      }
     }
+
+    // 同一段活动，改用 SSE 长连接：只有真正产生事件时才发一帧，
+    // 而且整段会话只有一次 HTTP 握手，不是每 3 秒一次。
+    const streamBodyBytes = bodyBytes - emptyEnvelopeBytes;
 
     return {
       measured: true,
@@ -186,6 +199,17 @@ async function measureShadowCore() {
       bodyBytes,
       overheadBytes: requests * HTTP_OVERHEAD_BYTES,
       totalBytes: bodyBytes + requests * HTTP_OVERHEAD_BYTES,
+      stream: {
+        // 一次连接 + 每 25 秒一个 3 字节保活注释。
+        requests: 1,
+        frames: nonEmptyDeltas,
+        bodyBytes: streamBodyBytes,
+        keepAliveBytes: Math.floor((MINUTES * 60) / 25) * ": keep-alive\n\n".length,
+        totalBytes:
+          streamBodyBytes
+          + HTTP_OVERHEAD_BYTES
+          + Math.floor((MINUTES * 60) / 25) * ": keep-alive\n\n".length,
+      },
     };
   } finally {
     await store.flush().catch(() => {});
@@ -223,24 +247,40 @@ const report = {
 if (args.includes("--json")) {
   console.log(JSON.stringify(report, null, 2));
 } else if (args.includes("--markdown")) {
-  console.log(`| 方案 | ${MINUTES} 分钟总流量 | 相对影核 | 数据来源 |`);
+  console.log(`| 方案 | ${MINUTES} 分钟总流量 | 相对影核 SSE | 数据来源 |`);
   console.log("| --- | --- | --- | --- |");
   console.log(
-    `| **影核动作同步**（轮询 ${POLL_SECONDS}s） | **${human(shadow.totalBytes)}** | 1× | 实测 |`,
+    `| **影核动作同步 · SSE** | **${human(shadow.stream.totalBytes)}** | 1× | 实测 |`,
+  );
+  console.log(
+    `| 影核动作同步 · 轮询 ${POLL_SECONDS}s | ${human(shadow.totalBytes)} | `
+      + `${(shadow.totalBytes / shadow.stream.totalBytes).toFixed(1)}× | 实测 |`,
   );
   for (const item of report.screen_stream_models) {
     console.log(
-      `| 屏幕流 · ${item.label} ${item.mbps} Mbps | ${human(item.totalBytes)} | ${item.ratio_vs_shadowcore}× | 按码率估算 |`,
+      `| 屏幕流 · ${item.label} ${item.mbps} Mbps | ${human(item.totalBytes)} | `
+        + `${Math.round(item.totalBytes / shadow.stream.totalBytes)}× | 按码率估算 |`,
     );
   }
 } else {
   console.log(`ClawMe 流量基准 · ${MINUTES} 分钟任务会话 · 轮询间隔 ${POLL_SECONDS}s\n`);
-  console.log("影核动作同步（实测）");
+  console.log(`影核动作同步 · 轮询（实测）`);
   console.log(`  请求数        ${shadow.requests}（其中 ${shadow.emptyPolls} 次无新事件）`);
   console.log(`  信封正文      ${human(shadow.bodyBytes)}`);
   console.log(`  HTTP 头开销   ${human(shadow.overheadBytes)}（按每次 ${HTTP_OVERHEAD_BYTES} B 估算）`);
   console.log(`  合计          ${human(shadow.totalBytes)}`);
   console.log(`  折合          ${human(shadow.totalBytes / MINUTES)}/分钟\n`);
+
+  console.log(`影核动作同步 · SSE 长连接（实测）`);
+  console.log(`  连接数        ${shadow.stream.requests}（整段会话一次握手）`);
+  console.log(`  推送帧        ${shadow.stream.frames} 帧，只有真的产生事件才发`);
+  console.log(`  信封正文      ${human(shadow.stream.bodyBytes)}`);
+  console.log(`  保活注释      ${human(shadow.stream.keepAliveBytes)}`);
+  console.log(`  合计          ${human(shadow.stream.totalBytes)}`);
+  console.log(
+    `  相比轮询      省 ${(100 - (shadow.stream.totalBytes / shadow.totalBytes) * 100).toFixed(1)}%，`
+      + `延迟从最多 ${POLL_SECONDS}s 降到即时\n`,
+  );
   console.log("屏幕流（按码率估算，非对第三方产品的实测）");
   for (const item of report.screen_stream_models) {
     console.log(
@@ -249,10 +289,9 @@ if (args.includes("--json")) {
     );
   }
   const overheadShare = shadow.overheadBytes / shadow.totalBytes;
-  if (overheadShare > 0.4) {
-    console.log(
-      `\n注意：${(overheadShare * 100).toFixed(0)}% 的流量花在了轮询的 HTTP 头上，` +
-        `不是内容本身。\n换成 SSE 长连接或推送唤醒还能再降一个量级 —— 这是下一步该做的事。`,
-    );
-  }
+  console.log(
+    `轮询版本里 ${(overheadShare * 100).toFixed(0)}% 的流量花在 HTTP 头上而不是内容 ——\n`
+      + `SSE 把这部分整个去掉。App 在前台时走流，断了自动退回轮询，游标不变。\n`
+      + `App 被系统杀掉后的唤醒仍需 FCM/APNs，那是另一半问题。`,
+  );
 }

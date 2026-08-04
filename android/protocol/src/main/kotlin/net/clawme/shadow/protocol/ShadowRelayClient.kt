@@ -68,6 +68,88 @@ class ShadowRelayClient(
     }
 
     /**
+     * 同一条游标流，改用长连接接收。
+     *
+     * 语义和 [sync] 完全一致 —— 同样的信封、同样的不透明游标、同样的至少一次
+     * 投递 —— 区别只是 relay 有变化才发，而不是手机每三秒问一次。轮询下 45% 的
+     * 流量花在 HTTP 头上，这里把那部分省掉。
+     *
+     * 这是个阻塞调用，跑在 IO 线程上。连接断了就正常返回或抛出，由调用方决定是
+     * 重连还是退回轮询 —— 游标不变，所以两条路径可以随时互换，不需要第二套
+     * 恢复规则。
+     *
+     * @param onEnvelope 每收到一个信封回调一次，附带这一帧实际的字节数。
+     * @param isActive 返回 false 时停止读取并关闭连接。
+     */
+    fun streamSync(
+        taskId: String,
+        after: String?,
+        isActive: () -> Boolean,
+        onEnvelope: (SyncEnvelope, Int) -> Unit,
+    ) {
+        val query = buildString {
+            if (after != null) append("after=").append(URLEncoder.encode(after, "UTF-8"))
+        }
+        val url = resolve(
+            "v3/sync/tasks/${encodeSegment(taskId)}/stream" + if (query.isEmpty()) "" else "?$query"
+        )
+        val connection = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = connectTimeoutMs
+            // 流是长期空闲的：靠服务端每 25 秒的保活注释来判断连接是否还活着，
+            // 而不是靠一个短读超时把正常的安静期误判成断线。
+            readTimeout = STREAM_READ_TIMEOUT_MS
+            instanceFollowRedirects = false
+            setRequestProperty("X-ClawMe-Token", token)
+            setRequestProperty("Accept", "text/event-stream")
+            setRequestProperty("Cache-Control", "no-cache")
+        }
+        try {
+            val status = connection.responseCode
+            if (status !in 200..299) {
+                val text = connection.errorStream?.bufferedReader(Charsets.UTF_8)
+                    ?.use { it.readText() }.orEmpty()
+                throw relayError(status, text)
+            }
+
+            val reader = connection.inputStream.bufferedReader(Charsets.UTF_8)
+            var eventName: String? = null
+            var data: String? = null
+
+            while (isActive()) {
+                val line = reader.readLine() ?: break
+                when {
+                    // SSE 用空行结束一帧。
+                    line.isEmpty() -> {
+                        val payload = data
+                        if (payload != null && eventName != "error") {
+                            val envelope = ShadowJson.decodeFromString(
+                                SyncEnvelope.serializer(), payload,
+                            )
+                            if (envelope.protocolVersion != SYNC_PROTOCOL) {
+                                throw ShadowProtocolException(
+                                    "不支持的 ClawMe 同步协议：${envelope.protocolVersion}"
+                                )
+                            }
+                            onEnvelope(envelope, payload.toByteArray(Charsets.UTF_8).size)
+                        } else if (payload != null) {
+                            throw ShadowRelayException("stream_error", "relay 中止了这条流")
+                        }
+                        eventName = null
+                        data = null
+                    }
+                    // 注释行就是保活，丢掉即可。
+                    line.startsWith(":") -> Unit
+                    line.startsWith("event:") -> eventName = line.removePrefix("event:").trim()
+                    line.startsWith("data:") -> data = line.removePrefix("data:").trim()
+                }
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /**
      * 请求 owner 签发确认挑战。
      *
      * 注意这里不发送任何 actor 身份：relay 从配对令牌推导执行者，手机说自己是谁不算数。
@@ -156,6 +238,9 @@ class ShadowRelayClient(
 
     companion object {
         private val LOCAL_HOSTS = setOf("127.0.0.1", "localhost", "::1", "10.0.2.2")
+
+        /** 服务端每 25 秒发一次保活注释；留足两次的余量再判定断线。 */
+        private const val STREAM_READ_TIMEOUT_MS = 70_000
 
         /**
          * 用配对码换取本机的设备令牌。

@@ -42,6 +42,13 @@ private class TinyRelay {
     @Volatile
     var response: Pair<Int, String> = 200 to "{}"
 
+    /**
+     * 设成非 null 时按 SSE 应答：逐帧写出后关闭连接。
+     * 每一项是一个完整的帧体（不含结尾空行），例如 "event: sync\ndata: {...}"。
+     */
+    @Volatile
+    var streamFrames: List<String>? = null
+
     val port: Int get() = server.localPort
 
     init {
@@ -84,6 +91,27 @@ private class TinyRelay {
                         headers = headers,
                         body = body.toString(Charsets.UTF_8),
                     )
+
+                    val frames = streamFrames
+                    if (frames != null) {
+                        // SSE：不带 Content-Length，逐帧写出，靠关闭连接结束。
+                        socket.getOutputStream().apply {
+                            write(
+                                (
+                                    "HTTP/1.1 200 OK\r\n" +
+                                        "Content-Type: text/event-stream\r\n" +
+                                        "Cache-Control: no-cache\r\n" +
+                                        "Connection: close\r\n\r\n"
+                                    ).toByteArray(Charsets.UTF_8)
+                            )
+                            flush()
+                            for (frame in frames) {
+                                write("$frame\n\n".toByteArray(Charsets.UTF_8))
+                                flush()
+                            }
+                        }
+                        return@use
+                    }
 
                     val (status, payload) = response
                     val bytes = payload.toByteArray(Charsets.UTF_8)
@@ -215,6 +243,81 @@ class ShadowRelayClientTest {
             assertEquals("shadow_action_unavailable", error.code)
             assertEquals(409, error.httpStatus)
             assertTrue(error.message.contains("checkpoint.create"))
+        }
+    }
+
+    @Test
+    fun `流式接收：保活注释被忽略，信封按顺序交付`() {
+        val snapshot = fixture("task-snapshot.json").replace(Regex("\\s+"), " ")
+        val delta = fixture("task-progress-delta.json").replace(Regex("\\s+"), " ")
+        relay.streamFrames = listOf(
+            "event: sync\ndata: $snapshot",
+            ": keep-alive",                 // 中间设备防掐断用的注释，不该被当成数据
+            "event: sync\ndata: $delta",
+        )
+
+        val received = mutableListOf<SyncEnvelope>()
+        var bytes = 0
+        client().streamSync(TASK_ID, after = null, isActive = { true }) { envelope, size ->
+            received += envelope
+            bytes += size
+        }
+
+        assertEquals(2, received.size)
+        assertEquals("sync.snapshot", received[0].type)
+        assertEquals("sync.delta", received[1].type)
+        assertTrue("字节数要如实记账，才能跟轮询比", bytes > 0)
+
+        val request = relay.requests.single()
+        assertEquals("/v3/sync/tasks/$TASK_ID/stream", request.path)
+        assertEquals("text/event-stream", request.headers["accept"])
+        assertEquals(TOKEN, request.headers["x-clawme-token"])
+    }
+
+    @Test
+    fun `流式接收：带游标连接时把游标带上去`() {
+        relay.streamFrames = listOf(": keep-alive")
+        client().streamSync(TASK_ID, after = "cm1.somecursor", isActive = { true }) { _, _ -> }
+
+        // 断线重连要从确认过的位置续传，而不是重放全部历史。
+        assertTrue(relay.requests.single().query!!.contains("after=cm1.somecursor"))
+    }
+
+    @Test
+    fun `流式接收：relay 中止时抛出，让调用方决定退回轮询`() {
+        relay.streamFrames = listOf("""event: error${'\n'}data: {"error":"invalid_cursor"}""")
+        try {
+            client().streamSync(TASK_ID, after = null, isActive = { true }) { _, _ -> }
+            fail("relay 中止流时必须抛出")
+        } catch (error: ShadowRelayException) {
+            assertEquals("stream_error", error.code)
+        }
+    }
+
+    @Test
+    fun `流式接收：isActive 变 false 就停下，不等服务端关`() {
+        val snapshot = fixture("task-snapshot.json").replace(Regex("\\s+"), " ")
+        relay.streamFrames = List(50) { "event: sync\ndata: $snapshot" }
+
+        var count = 0
+        // 界面离开或任务切换时要能立刻收手，否则连接和内存都会积累。
+        client().streamSync(TASK_ID, after = null, isActive = { count < 3 }) { _, _ -> count += 1 }
+
+        assertEquals(3, count)
+    }
+
+    @Test
+    fun `流式接收：协议标识不认识就断，绝不猜着解析`() {
+        relay.streamFrames = listOf(
+            """event: sync${'\n'}data: {"protocol":"action-parity/sync@9.9","type":"sync.delta",""" +
+                """"stream_id":"s","message_id":"m","sent_at":"t",""" +
+                """"payload":{"cursor":"c","state_version":1,"events":[]}}"""
+        )
+        try {
+            client().streamSync(TASK_ID, after = null, isActive = { true }) { _, _ -> }
+            fail("未知协议版本必须被拒绝")
+        } catch (expected: ShadowProtocolException) {
+            assertTrue(expected.message!!.contains("9.9"))
         }
     }
 
