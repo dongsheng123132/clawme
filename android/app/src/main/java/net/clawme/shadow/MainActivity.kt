@@ -24,6 +24,7 @@ class MainActivity : FragmentActivity() {
                 val state by model.state.collectAsState()
                 ShadowCoreScreen(
                     state = state,
+                    onPairWithCode = model::pairWithCode,
                     onSavePairing = model::savePairing,
                     onForgetPairing = model::forgetPairing,
                     onRequestChallenge = { reason, mode -> model.requestChallenge(reason, mode) },

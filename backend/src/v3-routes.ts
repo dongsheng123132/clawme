@@ -3,9 +3,12 @@ import {
   getIdentityFromRequest,
   identityHasRole,
   identityOwnsMachine,
+  isRootIdentity,
   type ClawMeIdentity,
+  type IdentityKind,
   type IdentityRole,
 } from "./auth.js";
+import { DeviceError, type DeviceStore } from "./devices.js";
 import type { AttentionRequest, DutyTask, Machine, TaskStatus } from "./v3-types.js";
 import { V3Store } from "./v3-store.js";
 import { SyncCursorError } from "./sync.js";
@@ -46,6 +49,125 @@ function shadowFailure(error: unknown, res: Response): boolean {
     ...(error.details ?? {}),
   });
   return true;
+}
+
+/** Root credentials only. A paired device must not be able to pair more devices. */
+function rootIdentity(req: Request, res: Response): ClawMeIdentity | undefined {
+  const identity = getIdentityFromRequest(req);
+  if (!identity) {
+    res.status(401).json({ error: "Invalid identity" });
+    return undefined;
+  }
+  if (!isRootIdentity(identity)) {
+    res.status(403).json({
+      error: "root_credential_required",
+      message: "Only a relay-configured credential may manage devices",
+    });
+    return undefined;
+  }
+  return identity;
+}
+
+function deviceFailure(error: unknown, res: Response): boolean {
+  if (!(error instanceof DeviceError)) return false;
+  res.status(error.status).json({ error: error.code, message: error.message });
+  return true;
+}
+
+const DEVICE_KINDS = new Set<IdentityKind>(["user", "device", "agent", "service"]);
+const DEVICE_ROLES = new Set<IdentityRole>(["controller", "owner"]);
+
+export function installDeviceRoutes(app: Express, devices: DeviceStore): void {
+  /** Mint a short-lived pairing code. The code is returned once and never again. */
+  app.post("/v3/pairing/codes", (req, res) => {
+    if (!rootIdentity(req, res)) return;
+    const body = req.body as {
+      name?: string;
+      role?: string;
+      surface?: string;
+      actor_kind?: string;
+      machine_ids?: unknown;
+      ttl_seconds?: unknown;
+    };
+    const role = (body.role ?? "controller") as IdentityRole;
+    const actorKind = (body.actor_kind ?? "device") as IdentityKind;
+    if (!DEVICE_ROLES.has(role)) {
+      return res.status(400).json({ error: "invalid_role", message: "role must be controller or owner" });
+    }
+    if (!DEVICE_KINDS.has(actorKind)) {
+      return res.status(400).json({ error: "invalid_actor_kind" });
+    }
+    const ttlSeconds = Number(body.ttl_seconds ?? 300);
+    if (!Number.isFinite(ttlSeconds) || ttlSeconds < 30 || ttlSeconds > 3600) {
+      return res.status(400).json({
+        error: "invalid_ttl",
+        message: "ttl_seconds must be between 30 and 3600",
+      });
+    }
+    try {
+      const issued = devices.createPairingCode(
+        {
+          name: String(body.name ?? "").trim(),
+          actorKind,
+          ...(typeof body.surface === "string" && body.surface.trim()
+            ? { surface: body.surface.trim() }
+            : {}),
+          role,
+          machineIds: Array.isArray(body.machine_ids)
+            ? body.machine_ids.filter((v): v is string => typeof v === "string" && Boolean(v.trim()))
+            : [],
+        },
+        ttlSeconds * 1000,
+      );
+      res.status(201).json(issued);
+    } catch (error) {
+      if (deviceFailure(error, res)) return;
+      throw error;
+    }
+  });
+
+  /**
+   * Redeem a pairing code for a device token.
+   *
+   * Deliberately unauthenticated: the code IS the one-time credential, which is
+   * the whole point — a new phone has nothing else yet. The store rate-limits
+   * failures because the code is short enough to be typed by a human.
+   */
+  app.post("/v3/pairing/redeem", (req, res) => {
+    try {
+      const { token, device } = devices.redeemPairingCode(
+        (req.body as { code?: unknown })?.code,
+        (req.body as { device_name?: string })?.device_name,
+      );
+      res.status(201).json({
+        token,
+        device_id: device.id,
+        actor_id: device.actorId,
+        role: device.role,
+        ...(device.surface ? { surface: device.surface } : {}),
+        name: device.name,
+      });
+    } catch (error) {
+      if (deviceFailure(error, res)) return;
+      throw error;
+    }
+  });
+
+  app.get("/v3/devices", (req, res) => {
+    if (!rootIdentity(req, res)) return;
+    res.json({ devices: devices.listDevices() });
+  });
+
+  /** Revocation takes effect on the next request. No restart, no config edit. */
+  app.post("/v3/devices/:id/revoke", (req, res) => {
+    if (!rootIdentity(req, res)) return;
+    try {
+      res.json({ device: devices.revokeDevice(req.params.id) });
+    } catch (error) {
+      if (deviceFailure(error, res)) return;
+      throw error;
+    }
+  });
 }
 
 export function installV3Routes(app: Express, store: V3Store): void {

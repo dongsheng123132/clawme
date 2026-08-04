@@ -11,3 +11,6 @@ android/*/build/
 android/local.properties
 *.apk
 
+
+# 设备凭据（即使只存哈希，也没有理由进版本库）
+data/clawme-devices.json

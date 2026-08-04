@@ -219,6 +219,61 @@ class ShadowRelayClientTest {
     }
 
     @Test
+    fun `配对码换令牌：不带任何已有凭据，因为这台手机还没有`() {
+        relay.response = 201 to """
+            {"token":"aa11bb22","device_id":"dev-1a2b","actor_id":"android-1a2b",
+             "role":"controller","surface":"android","name":"Pixel"}
+        """.trimIndent()
+
+        val paired = ShadowRelayClient.redeemPairingCode(
+            "http://127.0.0.1:${relay.port}",
+            code = "abcde-12345",
+            deviceName = "Pixel",
+        )
+
+        assertEquals("aa11bb22", paired.token)
+        assertEquals("dev-1a2b", paired.deviceId)
+        assertEquals("controller", paired.role)
+
+        val request = relay.requests.single()
+        assertEquals("POST", request.method)
+        assertEquals("/v3/pairing/redeem", request.path)
+        // 兑换是唯一不带令牌的调用：配对码本身就是那一次的凭据。
+        assertNull("配对请求不该带令牌头", request.headers["x-clawme-token"])
+
+        val body = ShadowJson.parseToJsonElement(request.body).jsonObject
+        assertEquals("abcde-12345", body.string("code"))
+        assertEquals("Pixel", body.string("device_name"))
+    }
+
+    @Test
+    fun `配对码无效时给出人能看懂的原因`() {
+        relay.response = 401 to
+            """{"error":"invalid_pairing_code","message":"pairing code is invalid or expired"}"""
+        try {
+            ShadowRelayClient.redeemPairingCode(
+                "http://127.0.0.1:${relay.port}",
+                code = "22222-22222",
+                deviceName = "Pixel",
+            )
+            fail("无效配对码必须抛出")
+        } catch (error: ShadowRelayException) {
+            assertEquals("invalid_pairing_code", error.code)
+            assertEquals(401, error.httpStatus)
+        }
+    }
+
+    @Test
+    fun `配对同样受 HTTPS 约束，不能因为方便就开个后门`() {
+        try {
+            ShadowRelayClient.redeemPairingCode("http://api.clawme.net", "22222-22222", "Pixel")
+            fail("公网明文配对必须被拒绝")
+        } catch (error: ShadowRelayException) {
+            assertEquals("insecure_relay", error.code)
+        }
+    }
+
+    @Test
     fun `公网 relay 必须 HTTPS，明文只留给本机调试`() {
         // 与 iOS saveConnection 同一条规矩：两端不能有一端偷偷放宽。
         assertNotNull(ShadowRelayClient.normalizeBase("https://api.clawme.net"))

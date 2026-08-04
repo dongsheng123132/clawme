@@ -9,12 +9,49 @@ function firstHeader(v: string | string[] | undefined): string | undefined {
 export type IdentityRole = "controller" | "owner" | "legacy";
 export type IdentityKind = "user" | "device" | "agent" | "service";
 
+/**
+ * Where a credential came from.
+ *
+ * `env` credentials are the relay's root: they are configured out of band, on
+ * the machine, and they are what mints and revokes everything else. `device`
+ * credentials are minted through pairing and can be revoked one at a time
+ * without touching the relay's configuration or restarting it.
+ *
+ * The distinction is what stops a paired phone from minting more phones.
+ */
+export type IdentitySource = "env" | "device";
+
 export interface ClawMeIdentity {
   actorId: string;
   actorKind: IdentityKind;
   surface?: string;
   role: IdentityRole;
   machineIds: string[];
+  source: IdentitySource;
+  /** Present only for minted device credentials. */
+  deviceId?: string;
+}
+
+interface DeviceResolver {
+  resolve(token: string): {
+    deviceId: string;
+    actorId: string;
+    actorKind: IdentityKind;
+    surface?: string;
+    role: IdentityRole;
+    machineIds: string[];
+  } | null;
+}
+
+let deviceResolver: DeviceResolver | null = null;
+
+/**
+ * Hand the auth layer a device store. Kept as injection rather than an import
+ * so this module stays a pure function of its inputs and the tests can drive it
+ * without a filesystem.
+ */
+export function useDeviceResolver(resolver: DeviceResolver | null): void {
+  deviceResolver = resolver;
 }
 
 interface ConfiguredIdentity {
@@ -58,11 +95,38 @@ function configuredIdentity(token: string): ClawMeIdentity | null | undefined {
         : {}),
       role: record.role as IdentityRole,
       machineIds,
+      source: "env",
     };
   } catch {
     // A malformed production identity map must fail closed.
     return null;
   }
+}
+
+/** True when CLAWME_IDENTITIES is set but cannot be parsed at all. */
+function identityMapIsBroken(): boolean {
+  const raw = process.env.CLAWME_IDENTITIES?.trim();
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw);
+    return !parsed || typeof parsed !== "object" || Array.isArray(parsed);
+  } catch {
+    return true;
+  }
+}
+
+function deviceIdentity(token: string): ClawMeIdentity | null {
+  const device = deviceResolver?.resolve(token);
+  if (!device) return null;
+  return {
+    actorId: device.actorId,
+    actorKind: device.actorKind,
+    ...(device.surface ? { surface: device.surface } : {}),
+    role: device.role,
+    machineIds: device.machineIds,
+    source: "device",
+    deviceId: device.deviceId,
+  };
 }
 
 /**
@@ -98,42 +162,78 @@ function tokenList(): string[] {
 }
 
 /**
- * Validate token against the allow-list (env CLAWME_TOKENS, comma-separated)
- * or the identity map (env CLAWME_IDENTITIES).
+ * Resolve a token to an actor, in order of authority:
  *
- * With neither configured the relay fails closed. Local development that
+ *   1. CLAWME_IDENTITIES — a root credential bound to one actor and role
+ *   2. CLAWME_TOKENS     — a root credential with legacy (unrestricted) access
+ *   3. a minted device credential — scoped, and revocable one at a time
+ *   4. the explicit open-relay development mode
+ *
+ * A token that matches none of these is not authenticated. A CLAWME_IDENTITIES
+ * value that cannot be parsed denies everything, device credentials included:
+ * a relay whose configuration is broken should stop, not improvise.
+ */
+function resolveIdentity(token: string): ClawMeIdentity | null {
+  if (identityMapIsBroken()) return null;
+
+  const configured = configuredIdentity(token);
+  if (configured) return configured;
+
+  if (tokenList().includes(token)) {
+    return {
+      actorId: `root-${createHash("sha256").update(token).digest("hex").slice(0, 16)}`,
+      actorKind: "device",
+      role: "legacy",
+      machineIds: [],
+      source: "env",
+    };
+  }
+
+  const device = deviceIdentity(token);
+  if (device) return device;
+
+  if (isUnconfigured() && process.env.CLAWME_ALLOW_ANY_TOKEN === "1") {
+    return {
+      actorId: `legacy-${createHash("sha256").update(token).digest("hex").slice(0, 16)}`,
+      actorKind: "device",
+      role: "legacy",
+      machineIds: [],
+      source: "env",
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Validate a token against root credentials, minted device credentials, or the
+ * explicit open-relay development mode.
+ *
+ * With no credentials configured the relay fails closed. Local development that
  * genuinely wants an open relay has to say so out loud with
  * CLAWME_ALLOW_ANY_TOKEN=1, which `npm start` refuses to combine with a
  * non-loopback bind.
  */
 export function isTokenAllowed(token: string | null): boolean {
-  if (!token) return false;
-  const identity = configuredIdentity(token);
-  if (identity !== undefined) return identity !== null;
-  const list = tokenList();
-  if (list.length === 0) return process.env.CLAWME_ALLOW_ANY_TOKEN === "1";
-  return list.includes(token);
+  return Boolean(token && resolveIdentity(token));
 }
 
-/**
- * Resolve the authenticated actor. When CLAWME_IDENTITIES is configured, a
- * token is bound to one actor, surface, role and optional machine allow-list.
- * Legacy token mode remains available for local development and migration.
- */
+/** Resolve the authenticated actor behind a request, or null. */
 export function getIdentityFromRequest(
   req: { headers: Record<string, string | string[] | undefined> },
 ): ClawMeIdentity | null {
   const token = getTokenFromRequest(req);
-  if (!token) return null;
-  const identity = configuredIdentity(token);
-  if (identity !== undefined) return identity;
-  if (!isTokenAllowed(token)) return null;
-  return {
-    actorId: `legacy-${createHash("sha256").update(token).digest("hex").slice(0, 16)}`,
-    actorKind: "device",
-    role: "legacy",
-    machineIds: [],
-  };
+  return token ? resolveIdentity(token) : null;
+}
+
+/**
+ * Only root credentials may mint or revoke device credentials.
+ *
+ * Without this a paired phone could pair more phones, and revoking the phone
+ * you lost would not revoke whatever it enrolled while you were looking for it.
+ */
+export function isRootIdentity(identity: ClawMeIdentity): boolean {
+  return identity.source === "env";
 }
 
 export function identityHasRole(

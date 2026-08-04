@@ -44,7 +44,20 @@ CLAWME_ALLOW_ANY_TOKEN=1 npm start   # 且只允许绑定回环地址
 
 - `deploy/setup.sh` 会生成 32 字节随机令牌写入 `/etc/clawme/token`（权限 600）
 - 不要用 `test` 之类的示例值，不要提交进版本库，不要贴进 Issue
-- 怀疑泄露就删掉 `/etc/clawme/token` 重跑部署脚本，然后更新各端
+
+### 给每台设备各自的凭据，而不是共用一个
+
+环境变量里的令牌是**根凭据**，应该只留在服务器和 owner 电脑上。手机、浏览器
+用配对签发的**设备凭据**：
+
+```bash
+node backend/scripts/pair.mjs new --name "我的手机"   # 10 位、5 分钟、一次性
+node backend/scripts/pair.mjs revoke dev-1a2b3c4d      # 立即生效，无需重启
+```
+
+这样手机丢了只吊销那一台，不用换掉所有端的凭据。设备令牌只以哈希落盘，
+且配对出来的设备**不能再配对别的设备**——否则丢失的手机会在你找它的时候
+注册出你不知道的凭据。
 
 ### 监听地址
 

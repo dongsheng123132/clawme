@@ -47,6 +47,23 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 真机连公网 relay 必须 HTTPS —— 这条规矩在 `ShadowRelayClient.normalizeBase` 里强制，
 与 iOS 端逐字一致，两端不能有一端偷偷放宽。
 
+## 配对
+
+在电脑上签发一个配对码，在手机里输进去：
+
+```bash
+cd backend
+export CLAWME_RELAY=https://api.clawme.net CLAWME_ROOT_TOKEN=<根令牌>
+node scripts/pair.mjs new --name "我的手机"
+# → SEYR9-TG4K6，5 分钟内有效，只能用一次
+```
+
+手机拿这个码换到的令牌**只属于这台设备**：加密进 Android Keystore，丢了可以在
+电脑上 `pair.mjs revoke` 单独作废，不用换掉浏览器插件和其他设备的凭据，也不用
+重启 relay。
+
+界面上仍留了「手动填令牌」的入口，给拿不到 relay 管理权限的场景兜底。
+
 ## 测试
 
 业务对不对，直接断言协议层，不用模拟器、不用截图：

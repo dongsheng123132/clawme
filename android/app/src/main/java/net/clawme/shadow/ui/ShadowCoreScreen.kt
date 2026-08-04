@@ -1,5 +1,6 @@
 package net.clawme.shadow.ui
 
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,6 +39,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -56,12 +58,14 @@ import net.clawme.shadow.protocol.ShadowConfirmationMode
 object ShadowTestTags {
     const val CHECKPOINT_CHALLENGE = "clawme.action.checkpoint.challenge"
     const val CHECKPOINT_CREATE = "clawme.action.checkpoint.create"
+    const val PAIRING_REDEEM = "clawme.action.pairing.redeem"
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun ShadowCoreScreen(
     state: ShadowUiState,
+    onPairWithCode: (String, String, String, String) -> Unit,
     onSavePairing: (String, String, String) -> Unit,
     onForgetPairing: () -> Unit,
     onRequestChallenge: (String, ShadowConfirmationMode) -> Unit,
@@ -105,6 +109,10 @@ fun ShadowCoreScreen(
                 item {
                     PairingCard(
                         state = state,
+                        onPairWithCode = { relay, task, code, name ->
+                            onPairWithCode(relay, task, code, name)
+                            pairingVisible = false
+                        },
                         onSave = { relay, task, token ->
                             onSavePairing(relay, task, token)
                             pairingVisible = false
@@ -210,12 +218,16 @@ private fun StatusCard(state: ShadowUiState, onTogglePairing: () -> Unit) {
 @Composable
 private fun PairingCard(
     state: ShadowUiState,
+    onPairWithCode: (String, String, String, String) -> Unit,
     onSave: (String, String, String) -> Unit,
     onForget: () -> Unit,
 ) {
     var relay by remember { mutableStateOf(state.relayUrl.ifEmpty { "https://api.clawme.net" }) }
     var task by remember { mutableStateOf(state.taskId) }
+    var code by remember { mutableStateOf("") }
     var token by remember { mutableStateOf("") }
+    // 配对码是默认路径；手抄令牌留给没有 relay 管理权限的场景。
+    var manualToken by remember { mutableStateOf(false) }
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -235,23 +247,52 @@ private fun PairingCard(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            OutlinedTextField(
-                value = token,
-                onValueChange = { token = it },
-                label = { Text(if (state.hasToken) "配对令牌（留空则沿用已存）" else "配对令牌") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                "公网 Relay 必须 HTTPS；令牌加密后存入 Android Keystore。",
-                style = MaterialTheme.typography.labelSmall,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onSave(relay, task, token) }) { Text("保存并同步") }
-                if (state.hasToken) {
-                    OutlinedButton(onClick = onForget) { Text("解除配对") }
+
+            if (manualToken) {
+                OutlinedTextField(
+                    value = token,
+                    onValueChange = { token = it },
+                    label = { Text(if (state.hasToken) "配对令牌（留空则沿用已存）" else "配对令牌") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    "公网 Relay 必须 HTTPS；令牌加密后存入 Android Keystore。",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { onSave(relay, task, token) }) { Text("保存并同步") }
+                    TextButton(onClick = { manualToken = false }) { Text("改用配对码") }
                 }
+            } else {
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = it },
+                    label = { Text("配对码") },
+                    placeholder = { Text("ABCDE-12345") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(ShadowTestTags.PAIRING_REDEEM),
+                )
+                Text(
+                    "在电脑上执行 clawme pair 取得配对码。它几分钟后失效、只能用一次；" +
+                        "换来的令牌只属于这台手机，丢了可以单独吊销。",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { onPairWithCode(relay, task, code, Build.MODEL ?: "Android") },
+                        enabled = code.isNotBlank(),
+                    ) { Text("配对这台手机") }
+                    TextButton(onClick = { manualToken = true }) { Text("手动填令牌") }
+                }
+            }
+
+            if (state.hasToken) {
+                OutlinedButton(onClick = onForget) { Text("解除配对") }
             }
         }
     }

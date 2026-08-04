@@ -3,8 +3,10 @@ import { getTokenFromRequest, isTokenAllowed, isUnconfigured } from "./auth.js";
 import { addInstruction, getPendingForTarget, getById, setResult, addMessage, getPendingMessages, markMessageRelayed } from "./store.js";
 import { relayResultToOpenClaw, relayMessageToOpenClaw } from "./relay.js";
 import type { InstructionRequest, ResultRequest, UserMessage } from "./types.js";
-import { installV3Routes } from "./v3-routes.js";
+import { installDeviceRoutes, installV3Routes } from "./v3-routes.js";
 import { V3Store } from "./v3-store.js";
+import { DeviceStore } from "./devices.js";
+import { useDeviceResolver } from "./auth.js";
 
 const app = express();
 app.use(express.json());
@@ -68,6 +70,14 @@ if (isUnconfigured()) {
 const v3Store = new V3Store();
 await v3Store.load();
 installV3Routes(app, v3Store);
+
+// Device credentials are minted by a root credential and revoked one at a time.
+// They live in their own 0600 file rather than the task store: different data,
+// different blast radius.
+const deviceStore = new DeviceStore();
+await deviceStore.load();
+useDeviceResolver(deviceStore);
+installDeviceRoutes(app, deviceStore);
 
 /** POST /v1/instructions — Agent / OpenClaw 下发指令 */
 app.post("/v1/instructions", (req, res) => {
@@ -187,7 +197,7 @@ app.listen(PORT, HOST, () => {
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
-    await v3Store.flush();
+    await Promise.all([v3Store.flush(), deviceStore.flush()]);
     process.exit(0);
   });
 }

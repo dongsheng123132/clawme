@@ -101,6 +101,42 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
         connect()
     }
 
+    /**
+     * 用配对码完成配对。
+     *
+     * 这条路径比手抄令牌好在两处：用户输的是 10 位、短期有效、一次性的码；
+     * 换来的令牌只属于这台设备，丢了手机可以在 relay 上单独吊销，不用换掉
+     * 所有端的凭据、也不用重启 relay。
+     */
+    fun pairWithCode(relayUrl: String, taskId: String, code: String, deviceName: String) {
+        val trimmedTask = taskId.trim()
+        if (trimmedTask.isEmpty()) {
+            _state.value = _state.value.copy(error = "任务 ID 不能为空")
+            return
+        }
+        viewModelScope.launch {
+            _state.value = _state.value.copy(message = "正在配对…", error = null)
+            try {
+                val paired = withContext(Dispatchers.IO) {
+                    ShadowRelayClient.redeemPairingCode(relayUrl, code, deviceName)
+                }
+                tokens.save(paired.token)
+                settings.relayUrl = relayUrl.trim().trimEnd('/')
+                settings.taskId = trimmedTask
+                _state.value = _state.value.copy(
+                    relayUrl = settings.relayUrl,
+                    taskId = trimmedTask,
+                    hasToken = true,
+                    message = "已配对为 ${paired.name ?: paired.deviceId}",
+                    error = null,
+                )
+                connect()
+            } catch (error: Exception) {
+                _state.value = _state.value.copy(error = error.message ?: "配对失败")
+            }
+        }
+    }
+
     fun forgetPairing() {
         disconnect()
         tokens.delete()

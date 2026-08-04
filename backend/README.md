@@ -13,6 +13,7 @@ Relay 负责设备心跳、任务事件、待处理授权、手机决定和离�
 | `CLAWME_BIND` | 监听地址，默认 `127.0.0.1`。要直接对外暴露才改 |
 | `CLAWME_IDENTITIES` | 生产用 token→actor/role/机器绑定 JSON；设置后取代 `CLAWME_TOKENS` |
 | `CLAWME_DATA_FILE` | v0.3 持久化文件，默认 `data/clawme-v3.json` |
+| `CLAWME_DEVICE_FILE` | 设备凭据文件，默认 `data/clawme-devices.json`（自动按 0600 落盘，只存哈希） |
 | `OPENCLAW_HOOK_URL` | 回传用，如 `http://127.0.0.1:18789` |
 | `OPENCLAW_HOOK_TOKEN` | 回传用，Gateway hooks.token |
 
@@ -27,6 +28,30 @@ Relay 负责设备心跳、任务事件、待处理授权、手机决定和离�
 - `POST /v3/attention` / `GET /v3/attention` — 创建、查看待处理事项
 - `POST /v3/attention/:id/decision` — 手机允许、拒绝或选择操作
 - `GET /v3/agent/commands` — 本地 Agent 领取手机决定和补充指令
+
+### 设备配对与吊销
+
+环境变量里的令牌是**根凭据**：它们配置在机器上，用来签发和吊销其他一切。
+手机、浏览器这些端应该用**设备凭据** —— 由根凭据签发，可以一台一台单独作废。
+
+```bash
+export CLAWME_RELAY=https://api.clawme.net
+export CLAWME_ROOT_TOKEN=<CLAWME_TOKENS 里的某一个>   # 只从环境变量读，不走命令行
+
+node scripts/pair.mjs new --name "我的手机"    # 出一个 10 位、5 分钟有效、一次性的配对码
+node scripts/pair.mjs list                      # 看都有哪些设备、最后活跃时间
+node scripts/pair.mjs revoke dev-1a2b3c4d       # 立即失效，不用重启 relay
+```
+
+- `POST /v3/pairing/codes` — 根凭据签发配对码（明文只返回这一次）
+- `POST /v3/pairing/redeem` — **不需要鉴权**：配对码本身就是那一次的凭据。
+  新手机此刻还没有任何东西。失败会限速，因为码短到能手输。
+- `GET /v3/devices` — 根凭据查看设备（不回传令牌，也不回传哈希）
+- `POST /v3/devices/:id/revoke` — 根凭据吊销，下一个请求就是 401
+
+设备令牌**只以 SHA-256 哈希落盘**，凭据文件被拖走也无法重放。配对出来的设备
+不是根凭据，因此**不能再去配对别的设备** —— 否则丢失的手机能在你找它的时候
+偷偷注册新设备，而你吊销了手机也吊销不掉那些。
 
 ### ShadowCore / UURescue
 

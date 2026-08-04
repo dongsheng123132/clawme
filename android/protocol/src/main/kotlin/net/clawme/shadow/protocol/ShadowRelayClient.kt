@@ -23,6 +23,16 @@ data class SyncFetch(
     val responseBytes: Int,
 )
 
+/** 配对成功后 relay 返回的设备身份。令牌明文只在这一次出现。 */
+data class PairedDevice(
+    val token: String,
+    val deviceId: String,
+    val actorId: String,
+    val role: String,
+    val surface: String?,
+    val name: String?,
+)
+
 /**
  * ClawMe v3 relay 的手机端调用方。
  *
@@ -146,6 +156,75 @@ class ShadowRelayClient(
 
     companion object {
         private val LOCAL_HOSTS = setOf("127.0.0.1", "localhost", "::1", "10.0.2.2")
+
+        /**
+         * 用配对码换取本机的设备令牌。
+         *
+         * 这是唯一不带令牌的调用 —— 新手机此刻还没有任何凭据，配对码本身就是
+         * 那一次的凭据。换来的令牌只属于这台设备，可以在 relay 上单独吊销，
+         * 不影响其他设备，也不需要重启 relay。
+         */
+        fun redeemPairingCode(
+            baseUrl: String,
+            code: String,
+            deviceName: String,
+            connectTimeoutMs: Int = 10_000,
+            readTimeoutMs: Int = 15_000,
+        ): PairedDevice {
+            val base = normalizeBase(baseUrl)
+            val url = URI("${base.scheme}://${base.authority}${base.path}/v3/pairing/redeem").toURL()
+            val body = ShadowJson.encodeToString(
+                JsonObject.serializer(),
+                JsonObject(
+                    mapOf(
+                        // relay 那边容忍大小写、连字符和空格，这里原样送过去即可。
+                        "code" to JsonPrimitive(code.trim()),
+                        "device_name" to JsonPrimitive(deviceName.trim()),
+                    )
+                ),
+            )
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = connectTimeoutMs
+                readTimeout = readTimeoutMs
+                instanceFollowRedirects = false
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Accept", "application/json")
+            }
+            try {
+                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                val status = connection.responseCode
+                val text = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                    ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    .orEmpty()
+                if (status !in 200..299) {
+                    val parsed = runCatching { ShadowJson.parseToJsonElement(text).jsonObject }.getOrNull()
+                    val code0 = parsed?.get("error")?.let { (it as? JsonPrimitive)?.content }
+                        ?: "relay_http_$status"
+                    val message = parsed?.get("message")?.let { (it as? JsonPrimitive)?.content }
+                        ?: when (code0) {
+                            "invalid_pairing_code" -> "配对码无效或已过期"
+                            "too_many_attempts" -> "尝试次数过多，请稍后再试"
+                            else -> "配对失败（HTTP $status）"
+                        }
+                    throw ShadowRelayException(code0, message, status)
+                }
+                val json = ShadowJson.parseToJsonElement(text).jsonObject
+                fun str(key: String) = (json[key] as? JsonPrimitive)?.content
+                return PairedDevice(
+                    token = str("token")
+                        ?: throw ShadowRelayException("invalid_relay_response", "relay 没有返回令牌"),
+                    deviceId = str("device_id").orEmpty(),
+                    actorId = str("actor_id").orEmpty(),
+                    role = str("role").orEmpty(),
+                    surface = str("surface"),
+                    name = str("name"),
+                )
+            } finally {
+                connection.disconnect()
+            }
+        }
 
         /**
          * 公网 relay 必须走 HTTPS；明文只留给本机和模拟器回环调试。
