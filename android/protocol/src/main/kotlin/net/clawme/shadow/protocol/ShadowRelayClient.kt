@@ -67,6 +67,39 @@ class ShadowRelayClient(
         return SyncFetch(envelope, body.toByteArray(Charsets.UTF_8).size)
     }
 
+    /** 连着的 owner 机器，以及每台声明的可启动程序。 */
+    fun listMachines(): List<RemoteMachine> {
+        val body = request("GET", resolve("v3/machines"), null)
+        return ShadowJson.decodeFromString(MachineListResponse.serializer(), body).machines
+    }
+
+    /** relay 上的任务列表。手机据此让用户切换，而不是靠手输任务 ID。 */
+    fun listTasks(limit: Int = 50): List<RemoteTask> {
+        val body = request("GET", resolve("v3/tasks?limit=$limit"), null)
+        return ShadowJson.decodeFromString(TaskListResponse.serializer(), body).tasks
+    }
+
+    /**
+     * 在 owner 电脑上启动一个它自己声明过的程序。
+     *
+     * 只发 app ID。手机没有、也不该有能力告诉电脑执行什么命令行。
+     */
+    fun launchApp(
+        machineId: String,
+        appId: String,
+        idempotencyKey: String = UUID.randomUUID().toString(),
+    ): String {
+        val url = resolve("v3/machines/${encodeSegment(machineId)}/apps/${encodeSegment(appId)}/launch")
+        val body = request("POST", url, "{}", mapOf("Idempotency-Key" to idempotencyKey))
+        return ShadowJson.decodeFromString(LaunchResponse.serializer(), body).commandId
+    }
+
+    /** 点完图标后短暂轮询这里，看 owner 到底开没开起来。 */
+    fun commandStatus(commandId: String): CommandStatus {
+        val body = request("GET", resolve("v3/commands/${encodeSegment(commandId)}"), null)
+        return ShadowJson.decodeFromString(CommandStatus.serializer(), body)
+    }
+
     /**
      * 同一条游标流，改用长连接接收。
      *

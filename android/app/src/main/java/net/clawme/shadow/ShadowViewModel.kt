@@ -3,6 +3,7 @@ package net.clawme.shadow
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import kotlinx.coroutines.flow.StateFlow
+import net.clawme.shadow.protocol.RemoteApp
 import net.clawme.shadow.protocol.ShadowActions
 import net.clawme.shadow.protocol.ShadowCheckpointChallenge
 import net.clawme.shadow.protocol.ShadowConfirmationMode
@@ -19,13 +20,13 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
 
     val state: StateFlow<ShadowUiState> = repository.state
 
-    fun savePairing(relayUrl: String, taskId: String, token: String) {
-        repository.savePairing(relayUrl, taskId, token)
+    fun savePairing(relayUrl: String, token: String) {
+        repository.savePairing(relayUrl, token)
         ShadowSyncService.startIfConfigured(getApplication())
     }
 
-    fun pairWithCode(relayUrl: String, taskId: String, code: String, deviceName: String) {
-        repository.pairWithCode(relayUrl, taskId, code, deviceName)
+    fun pairWithCode(relayUrl: String, code: String, deviceName: String) {
+        repository.pairWithCode(relayUrl, code, deviceName)
         // 配对是异步的；服务在仓库确认配置完整之后才会真正起来。
         ShadowSyncService.startIfConfigured(getApplication())
     }
@@ -38,6 +39,12 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
     fun connect() = repository.connect()
 
     fun dismissError() = repository.dismissError()
+
+    fun selectMachine(machineId: String) = repository.selectMachine(machineId)
+
+    fun selectTask(taskId: String) = repository.selectTask(taskId)
+
+    fun launchApp(app: RemoteApp) = repository.launchApp(app)
 
     fun requestChallenge(
         reason: String,

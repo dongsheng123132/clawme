@@ -59,6 +59,61 @@ data class RemoteTask(
     val updatedAt: String,
 )
 
+/**
+ * owner 电脑上一个可以启动的程序。
+ *
+ * 注意它没有命令行、没有路径、也没有图片：手机拿到的是身份和怎么把它画出来，
+ * 执行由 owner 从自己的白名单里查。图标是一个短标签加一个颜色 —— 连启动器都
+ * 不传像素。
+ */
+@Serializable
+data class RemoteApp(
+    val id: String,
+    val name: String,
+    val label: String? = null,
+    val color: String? = null,
+)
+
+@Serializable
+data class RemoteMachine(
+    val id: String,
+    val name: String,
+    val platform: String = "unknown",
+    val agentVersion: String = "",
+    val capabilities: List<String> = emptyList(),
+    val apps: List<RemoteApp> = emptyList(),
+    val lastSeenAt: String = "",
+)
+
+@Serializable
+internal data class MachineListResponse(val machines: List<RemoteMachine> = emptyList())
+
+@Serializable
+internal data class TaskListResponse(val tasks: List<RemoteTask> = emptyList())
+
+@Serializable
+internal data class LaunchResponse(
+    @SerialName("command_id") val commandId: String,
+    val status: String = "queued",
+)
+
+@Serializable
+data class CommandStatus(
+    @SerialName("command_id") val commandId: String,
+    val type: String = "",
+    val status: String = "queued",
+    val result: JsonObject? = null,
+) {
+    val ok: Boolean
+        get() = (result?.get("ok") as? kotlinx.serialization.json.JsonPrimitive)
+            ?.let { if (it.isString) null else it.content.toBooleanStrictOrNull() } == true
+
+    /** owner 报回来的失败原因；开没开起来只有它知道，手机不猜。 */
+    val failure: String?
+        get() = (result?.get("error") as? kotlinx.serialization.json.JsonPrimitive)
+            ?.takeIf { it.isString }?.content
+}
+
 @Serializable
 data class RemoteAttentionOption(
     val id: String,

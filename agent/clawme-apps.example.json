@@ -1,0 +1,24 @@
+[
+  {
+    "id": "vscode",
+    "name": "VS Code",
+    "label": "VS",
+    "color": "#0a84ff",
+    "command": "C:/Program Files/Microsoft VS Code/Code.exe"
+  },
+  {
+    "id": "terminal",
+    "name": "终端",
+    "label": ">_",
+    "color": "#5f6368",
+    "command": "wt.exe",
+    "args": ["-p", "PowerShell"]
+  },
+  {
+    "id": "obsidian",
+    "name": "Obsidian",
+    "label": "Ob",
+    "color": "#7c3aed",
+    "command": "C:/Users/you/AppData/Local/Obsidian/Obsidian.exe"
+  }
+]

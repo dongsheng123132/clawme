@@ -13,12 +13,32 @@ export type AttentionKind =
   | "quota"
   | "error";
 
+/**
+ * 一个可以在 owner 电脑上启动的程序。
+ *
+ * 注意这里**没有命令行**。手机只知道 ID 和怎么把它画出来；要执行什么，由 owner
+ * 从它自己配置的白名单里查。手机能发送命令行的那一刻，"远程开程序"就变成了
+ * "远程任意代码执行"。
+ *
+ * 图标也不是图片，是一个短标签加一个颜色 —— 连启动器都不传像素。
+ */
+export interface MachineApp {
+  id: string;
+  name: string;
+  /** 磁贴上的短标签，一到两个字符，例如 "VS"。 */
+  label?: string;
+  /** 磁贴颜色，#RRGGBB。 */
+  color?: string;
+}
+
 export interface Machine {
   id: string;
   name: string;
   platform: string;
   agentVersion: string;
   capabilities: string[];
+  /** owner 声明的可启动程序。relay 只转发，不决定有没有这个程序。 */
+  apps?: MachineApp[];
   lastSeenAt: string;
 }
 
@@ -81,7 +101,8 @@ export interface AgentCommand {
     | "switch_model"
     | "pause"
     | "shadow_challenge"
-    | "shadow_execute";
+    | "shadow_execute"
+    | "app_launch";
   payload: Record<string, unknown>;
   createdAt: string;
   acknowledgedAt?: string;

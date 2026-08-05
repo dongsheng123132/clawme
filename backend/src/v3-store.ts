@@ -196,6 +196,54 @@ export class V3Store {
     return [...this.data.machines].sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
   }
 
+  getMachine(id: string): Machine | undefined {
+    return this.data.machines.find((item) => item.id === id);
+  }
+
+  /**
+   * 排队一次程序启动。
+   *
+   * relay 只做路由：它检查这台机器**声明过**这个程序，然后把 ID 转过去。
+   * 要执行什么命令行由 owner 自己查 —— 手机从来不发送可执行内容，这是
+   * "远程开程序"和"远程任意代码执行"之间唯一的那道墙。
+   */
+  launchApp(machineId: string, appId: string, requestKey?: string): AgentCommand {
+    const machine = this.getMachine(machineId);
+    if (!machine) {
+      throw new ShadowError("machine_not_found", "Machine is not registered", 404);
+    }
+    const app = machine.apps?.find((item) => item.id === appId);
+    if (!app) {
+      throw new ShadowError(
+        "app_not_declared",
+        `${machine.id} does not declare an app called ${appId}`,
+        409,
+      );
+    }
+    if (requestKey) {
+      // 至少一次投递意味着重试会发生；同一个键只排一次队。
+      const existing = this.data.commands.find(
+        (item) => item.type === "app_launch"
+          && item.machineId === machineId
+          && item.payload.request_key === requestKey,
+      );
+      if (existing) return existing;
+    }
+    return this.addCommand({
+      machineId,
+      type: "app_launch",
+      payload: {
+        app_id: app.id,
+        app_name: app.name,
+        ...(requestKey ? { request_key: requestKey } : {}),
+      },
+    });
+  }
+
+  getCommand(id: string): AgentCommand | undefined {
+    return this.data.commands.find((item) => item.id === id);
+  }
+
   upsertTask(input: Omit<DutyTask, "createdAt" | "updatedAt"> & { createdAt?: string }): DutyTask {
     const now = new Date().toISOString();
     const existing = this.data.tasks.find((item) => item.id === input.id);
@@ -598,6 +646,17 @@ export class V3Store {
     );
     if (!command) return undefined;
     if (command.result) return command;
+
+    // 启动程序不走挑战确认：它是低风险、可逆的，配对本身就是授权。给它套上
+    // 一次生物识别，用户只会学会盲目按确认，那反而削弱了真正需要确认的写动作。
+    if (command.type === "app_launch") {
+      command.result = result;
+      command.completedAt = new Date().toISOString();
+      command.acknowledgedAt = command.completedAt;
+      this.persist();
+      return command;
+    }
+
     if (!["shadow_challenge", "shadow_execute"].includes(command.type)) {
       throw new ShadowError(
         "command_result_unsupported",

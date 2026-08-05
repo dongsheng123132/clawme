@@ -45,3 +45,25 @@ UURescue 当前任务。Agent 会：
 
 `CLAWME_UU_RESCUE_BIN` 应指向 JS 入口。调用不经过 shell，动作内容不会拼进
 命令行，临时文件用后删除。
+
+## 开放程序给手机启动
+
+手机上那排图标来自这台电脑自己声明的清单。把 `clawme-apps.example.json` 复制成
+`clawme-apps.json` 并改成你的路径，agent 会随心跳把它上报：
+
+```bash
+cp clawme-apps.example.json clawme-apps.json
+CLAWME_APPS=./clawme-apps.json npm start
+```
+
+安全模型只有一句话：**手机发的是 ID，不是命令行。**
+
+- `command` / `args` 只存在于本机这份文件里，**不会随心跳上报**，relay 和手机都拿不到；
+- 手机点图标时发的是 `app_id`，agent 在自己的清单里查，查不到就拒绝；
+- 启动走 `spawn` 传参数数组、`shell: false`，配置里再古怪的字符也变不成命令注入；
+- 进程 `detached` 启动，agent 退出不会把你刚打开的程序一起带走。
+
+少了第一条，"远程开程序"和"远程任意代码执行"就是同一件事。
+
+图标不传图片，只传一个 `label`（一到两个字符）和 `color`（`#RRGGBB`）——
+连启动器都不发像素。

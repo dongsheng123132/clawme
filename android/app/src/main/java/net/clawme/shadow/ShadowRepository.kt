@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.clawme.shadow.protocol.RemoteApp
+import net.clawme.shadow.protocol.RemoteMachine
+import net.clawme.shadow.protocol.RemoteTask
 import net.clawme.shadow.protocol.ShadowActions
 import net.clawme.shadow.protocol.ShadowCheckpointChallenge
 import net.clawme.shadow.protocol.ShadowConfirmationMode
@@ -36,12 +39,25 @@ data class ShadowUiState(
     val transport: Transport = Transport.POLLING,
     val shadow: ShadowState = ShadowState(),
     val busyRequests: Set<String> = emptySet(),
+    /** relay 上有哪些 owner 机器，各自声明了哪些可启动程序。 */
+    val machines: List<RemoteMachine> = emptyList(),
+    val tasks: List<RemoteTask> = emptyList(),
+    val selectedMachineId: String? = null,
+    /** 正在启动中的程序 ID，用来把磁贴置灰。 */
+    val launching: Set<String> = emptySet(),
+    val launchNote: String? = null,
     /** 会话内的同步次数与实收字节 —— 界面上直接显示，「省流量」不靠嘴说。 */
     val syncCount: Int = 0,
     val bytesReceived: Long = 0,
     val message: String = "尚未配对",
     val error: String? = null,
-)
+) {
+    val selectedMachine: RemoteMachine?
+        get() = machines.firstOrNull { it.id == selectedMachineId } ?: machines.firstOrNull()
+
+    val selectedTask: RemoteTask?
+        get() = tasks.firstOrNull { it.id == taskId }
+}
 
 /**
  * 手机影子的运行时，进程级单例。
@@ -49,9 +65,6 @@ data class ShadowUiState(
  * 它原本长在 ViewModel 里，于是界面一销毁连接就断 —— 而这个 App 的价值恰恰在
  * 你没看着它的时候：owner 发来一个确认挑战，你得知道。所以循环归仓库，仓库归
  * 前台服务托着，ViewModel 退化成一个观察者。
- *
- * 它只做三件事：按游标拉自己缺的那一段、把 owner 的挑战摆到用户面前、把用户的
- * 确认交回 owner 执行。任何动作都不在手机上实现第二遍。
  */
 class ShadowRepository private constructor(context: Context) {
 
@@ -70,6 +83,7 @@ class ShadowRepository private constructor(context: Context) {
     val state: StateFlow<ShadowUiState> = _state.asStateFlow()
 
     private var syncJob: Job? = null
+    private var directoryJob: Job? = null
 
     /** 已经提醒过的挑战，避免每次投影都再响一遍。 */
     private val notifiedChallenges = mutableSetOf<String>()
@@ -87,52 +101,15 @@ class ShadowRepository private constructor(context: Context) {
     }
 
     fun isConfigured(): Boolean =
-        settings.relayUrl.isNotEmpty() && settings.taskId.isNotEmpty() && tokens.read() != null
-
-    fun savePairing(relayUrl: String, taskId: String, token: String) {
-        val trimmedTask = taskId.trim()
-        val trimmedToken = token.trim()
-        try {
-            // 地址合法性和 HTTPS 强制在这里就判掉，别等到发请求才炸。
-            ShadowRelayClient.normalizeBase(relayUrl)
-        } catch (error: ShadowRelayException) {
-            _state.value = _state.value.copy(error = error.message)
-            return
-        }
-        if (trimmedTask.isEmpty()) {
-            _state.value = _state.value.copy(error = "任务 ID 不能为空")
-            return
-        }
-        if (trimmedToken.isEmpty() && tokens.read() == null) {
-            _state.value = _state.value.copy(error = "首次配对必须填写令牌")
-            return
-        }
-        if (trimmedToken.isNotEmpty()) tokens.save(trimmedToken)
-        settings.relayUrl = relayUrl.trim().trimEnd('/')
-        settings.taskId = trimmedTask
-        _state.value = _state.value.copy(
-            relayUrl = settings.relayUrl,
-            taskId = trimmedTask,
-            hasToken = true,
-            error = null,
-            message = "已保存配对，正在同步…",
-        )
-        connect()
-    }
+        settings.relayUrl.isNotEmpty() && tokens.read() != null
 
     /**
      * 用配对码完成配对。
      *
-     * 这条路径比手抄令牌好在两处：用户输的是 10 位、短期有效、一次性的码；
-     * 换来的令牌只属于这台设备，丢了手机可以在 relay 上单独吊销，不用换掉
-     * 所有端的凭据、也不用重启 relay。
+     * 不再要求手输任务 ID —— 配对成功后自己去 relay 上取列表。让用户手抄一个
+     * 内部标识本来就是把实现细节推给人。
      */
-    fun pairWithCode(relayUrl: String, taskId: String, code: String, deviceName: String) {
-        val trimmedTask = taskId.trim()
-        if (trimmedTask.isEmpty()) {
-            _state.value = _state.value.copy(error = "任务 ID 不能为空")
-            return
-        }
+    fun pairWithCode(relayUrl: String, code: String, deviceName: String) {
         scope.launch {
             _state.value = _state.value.copy(message = "正在配对…", error = null)
             try {
@@ -141,10 +118,8 @@ class ShadowRepository private constructor(context: Context) {
                 }
                 tokens.save(paired.token)
                 settings.relayUrl = relayUrl.trim().trimEnd('/')
-                settings.taskId = trimmedTask
                 _state.value = _state.value.copy(
                     relayUrl = settings.relayUrl,
-                    taskId = trimmedTask,
                     hasToken = true,
                     message = "已配对为 ${paired.name ?: paired.deviceId}",
                     error = null,
@@ -154,6 +129,31 @@ class ShadowRepository private constructor(context: Context) {
                 _state.value = _state.value.copy(error = error.message ?: "配对失败")
             }
         }
+    }
+
+    /** 手动填令牌的兜底路径，给拿不到 relay 管理权限的场景。 */
+    fun savePairing(relayUrl: String, token: String) {
+        val trimmedToken = token.trim()
+        try {
+            // 地址合法性和 HTTPS 强制在这里就判掉，别等到发请求才炸。
+            ShadowRelayClient.normalizeBase(relayUrl)
+        } catch (error: ShadowRelayException) {
+            _state.value = _state.value.copy(error = error.message)
+            return
+        }
+        if (trimmedToken.isEmpty() && tokens.read() == null) {
+            _state.value = _state.value.copy(error = "首次配对必须填写令牌")
+            return
+        }
+        if (trimmedToken.isNotEmpty()) tokens.save(trimmedToken)
+        settings.relayUrl = relayUrl.trim().trimEnd('/')
+        _state.value = _state.value.copy(
+            relayUrl = settings.relayUrl,
+            hasToken = true,
+            error = null,
+            message = "已保存配对，正在同步…",
+        )
+        connect()
     }
 
     fun forgetPairing() {
@@ -169,34 +169,82 @@ class ShadowRepository private constructor(context: Context) {
             _state.value = _state.value.copy(message = "请先完成 Relay 配对", connected = false)
             return
         }
-        if (syncJob?.isActive == true) return
-        syncJob = scope.launch {
-            while (isActive) {
-                // 先试长连接：relay 有变化才发，省掉每三秒一次的请求头。
-                val streamed = runCatching { streamLoop() }
-                if (!isActive) break
-                if (streamed.isFailure) {
-                    _state.value = _state.value.copy(
-                        transport = Transport.POLLING,
-                        connected = false,
-                        error = null, // 流断掉是常态，不该弹给用户看
-                    )
-                }
-                // 流断开期间照样要追上进度，游标不变所以两条路可以随时互换。
-                syncOnce()
-                delay(POLL_INTERVAL_MS)
-            }
-        }
+        startDirectoryLoop()
+        startSyncLoop()
     }
 
     fun disconnect() {
-        syncJob?.cancel()
-        syncJob = null
+        syncJob?.cancel(); syncJob = null
+        directoryJob?.cancel(); directoryJob = null
         _state.value = _state.value.copy(connected = false, message = "已断开")
     }
 
     fun dismissError() {
-        _state.value = _state.value.copy(error = null)
+        _state.value = _state.value.copy(error = null, launchNote = null)
+    }
+
+    fun selectMachine(machineId: String) {
+        _state.value = _state.value.copy(selectedMachineId = machineId)
+    }
+
+    /** 切任务就是换一条流。游标各自独立，所以来回切不会丢事件也不会重放。 */
+    fun selectTask(taskId: String) {
+        if (taskId == _state.value.taskId) return
+        settings.taskId = taskId
+        val saved = settings.cursor(taskId)
+        val cursors = if (saved != null) {
+            // 之前跟过这条任务，从上次确认的位置续上。
+            _state.value.shadow.cursors + (taskId to saved)
+        } else {
+            // 第一次跟，让它从快照开始，而不是硬塞一个空游标。
+            _state.value.shadow.cursors - taskId
+        }
+        _state.value = _state.value.copy(
+            taskId = taskId,
+            shadow = _state.value.shadow.copy(cursors = cursors),
+        )
+        startSyncLoop(restart = true)
+    }
+
+    /**
+     * 在选中的 owner 机器上启动一个程序。
+     *
+     * 只发 app ID。要执行什么由那台电脑从自己的白名单里查 —— 手机没有能力、
+     * 也不该有能力告诉它跑什么命令行。
+     */
+    fun launchApp(app: RemoteApp) {
+        val machineId = _state.value.selectedMachine?.id ?: return
+        val client = client() ?: return
+        if (app.id in _state.value.launching) return
+        scope.launch {
+            _state.value = _state.value.copy(
+                launching = _state.value.launching + app.id,
+                launchNote = null,
+                error = null,
+            )
+            try {
+                val commandId = withContext(Dispatchers.IO) { client.launchApp(machineId, app.id) }
+                var note = "已交给电脑打开 ${app.name}"
+                // 短暂等待回执：开没开起来只有 owner 知道，手机不猜。
+                repeat(LAUNCH_POLL_ATTEMPTS) {
+                    delay(LAUNCH_POLL_INTERVAL_MS)
+                    val status = withContext(Dispatchers.IO) { client.commandStatus(commandId) }
+                    if (status.status == "completed") {
+                        note = if (status.failure != null) {
+                            "${app.name} 没能打开：${status.failure}"
+                        } else {
+                            "${app.name} 已在电脑上打开"
+                        }
+                        return@repeat
+                    }
+                }
+                _state.value = _state.value.copy(launchNote = note)
+            } catch (error: Exception) {
+                _state.value = _state.value.copy(error = error.message ?: "启动失败")
+            } finally {
+                _state.value = _state.value.copy(launching = _state.value.launching - app.id)
+            }
+        }
     }
 
     /**
@@ -209,6 +257,7 @@ class ShadowRepository private constructor(context: Context) {
     ) {
         val client = client() ?: return
         val taskId = _state.value.taskId
+        if (taskId.isEmpty()) return
         scope.launch {
             try {
                 withContext(Dispatchers.IO) {
@@ -262,6 +311,72 @@ class ShadowRepository private constructor(context: Context) {
         }
     }
 
+    /** 机器和任务列表。它们比事件流变化慢得多，所以单独一条慢循环。 */
+    private fun startDirectoryLoop() {
+        if (directoryJob?.isActive == true) return
+        directoryJob = scope.launch {
+            while (isActive) {
+                refreshDirectory()
+                delay(DIRECTORY_INTERVAL_MS)
+            }
+        }
+    }
+
+    private suspend fun refreshDirectory() {
+        val client = client() ?: return
+        try {
+            val machines = withContext(Dispatchers.IO) { client.listMachines() }
+            val tasks = withContext(Dispatchers.IO) { client.listTasks() }
+            val current = _state.value
+            // 没选过就自动选第一台/第一条，别让用户对着空界面猜下一步。
+            val machineId = current.selectedMachineId?.takeIf { id -> machines.any { it.id == id } }
+                ?: machines.firstOrNull()?.id
+            val taskId = current.taskId.takeIf { id -> tasks.any { it.id == id } }
+                ?: tasks.firstOrNull()?.id.orEmpty()
+            val taskChanged = taskId.isNotEmpty() && taskId != current.taskId
+            if (taskChanged) settings.taskId = taskId
+            _state.value = current.copy(
+                machines = machines,
+                tasks = tasks,
+                selectedMachineId = machineId,
+                taskId = taskId,
+            )
+            if (taskChanged) startSyncLoop(restart = true)
+        } catch (error: Exception) {
+            // 目录取不到不该把界面判死：事件流可能还好好的。
+            if (_state.value.machines.isEmpty()) {
+                _state.value = _state.value.copy(error = error.message ?: "无法读取机器列表")
+            }
+        }
+    }
+
+    private fun startSyncLoop(restart: Boolean = false) {
+        if (restart) syncJob?.cancel()
+        else if (syncJob?.isActive == true) return
+        syncJob = scope.launch {
+            while (isActive) {
+                if (_state.value.taskId.isEmpty()) {
+                    // 还没有任务可跟，安静等目录循环发现一个。
+                    delay(POLL_INTERVAL_MS)
+                    continue
+                }
+                // 先试长连接：relay 有变化才发，省掉每三秒一次的请求头。
+                val streamed = runCatching { streamLoop() }
+                if (!isActive) break
+                if (streamed.isFailure) {
+                    _state.value = _state.value.copy(
+                        transport = Transport.POLLING,
+                        connected = false,
+                        error = null, // 流断掉是常态，不该弹给用户看
+                    )
+                }
+                // 流断开期间照样要追上进度，游标不变所以两条路可以随时互换。
+                syncOnce()
+                delay(POLL_INTERVAL_MS)
+            }
+        }
+    }
+
     /** 阻塞在 IO 线程上读流，直到断开或被取消。 */
     private suspend fun streamLoop() {
         val client = client() ?: return
@@ -270,7 +385,7 @@ class ShadowRepository private constructor(context: Context) {
             client.streamSync(
                 taskId = taskId,
                 after = _state.value.shadow.cursor(taskId),
-                isActive = { isActive },
+                isActive = { isActive && _state.value.taskId == taskId },
                 onEnvelope = { envelope, bytes ->
                     applyEnvelope(taskId, envelope, bytes, Transport.STREAM)
                 },
@@ -315,6 +430,7 @@ class ShadowRepository private constructor(context: Context) {
     private suspend fun syncOnce() {
         val client = client() ?: return
         val taskId = _state.value.taskId
+        if (taskId.isEmpty()) return
         try {
             var pages = 0
             while (pages < MAX_PAGES) {
@@ -335,7 +451,7 @@ class ShadowRepository private constructor(context: Context) {
 
     private fun client(): ShadowRelayClient? {
         val token = tokens.read()
-        if (settings.relayUrl.isEmpty() || settings.taskId.isEmpty() || token == null) {
+        if (settings.relayUrl.isEmpty() || token == null) {
             _state.value = _state.value.copy(error = "请先完成 Relay 配对")
             return null
         }
@@ -346,6 +462,9 @@ class ShadowRepository private constructor(context: Context) {
 
     companion object {
         private const val POLL_INTERVAL_MS = 3_000L
+        private const val DIRECTORY_INTERVAL_MS = 20_000L
+        private const val LAUNCH_POLL_INTERVAL_MS = 700L
+        private const val LAUNCH_POLL_ATTEMPTS = 8
         private const val MAX_PAGES = 10
         private const val RESULT_POLL_ATTEMPTS = 20
 

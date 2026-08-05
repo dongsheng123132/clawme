@@ -43,6 +43,9 @@ class MainActivity : FragmentActivity() {
                     onPairWithCode = model::pairWithCode,
                     onSavePairing = model::savePairing,
                     onForgetPairing = model::forgetPairing,
+                    onSelectMachine = model::selectMachine,
+                    onSelectTask = model::selectTask,
+                    onLaunchApp = model::launchApp,
                     onRequestChallenge = { reason, mode -> model.requestChallenge(reason, mode) },
                     onConfirmChallenge = { challenge ->
                         model.confirmChallenge(challenge, authenticator::authenticate)

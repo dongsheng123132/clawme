@@ -7,6 +7,8 @@ export class ShadowWorker {
     relayTaskId,
     register,
     heartbeat,
+    /** 本机开放的可启动程序。没配就是一个空清单，手机那边不会出现任何图标。 */
+    launcher = { launch: async () => ({ ok: false, error: "这台电脑没有开放任何程序" }) },
     pollIntervalMs = 1500,
     heartbeatIntervalMs = 30_000,
     onError = (error) => console.error("[shadow-worker]", error.message),
@@ -15,6 +17,7 @@ export class ShadowWorker {
     this.relay = relay;
     this.bridge = bridge;
     this.relayTaskId = relayTaskId;
+    this.launcher = launcher;
     this.register = register;
     this.heartbeat = heartbeat;
     this.pollIntervalMs = pollIntervalMs;
@@ -112,6 +115,17 @@ export class ShadowWorker {
     await this.syncWithRecovery();
     const commands = await this.relay.getCommands();
     for (const command of commands) {
+      // 启动程序是对这台**机器**的操作，不属于任何一条任务流，所以它要排在
+      // 按任务过滤之前 —— 否则它永远不会被看见。
+      if (command.type === "app_launch") {
+        try {
+          const result = await this.launcher.launch(command.payload?.app_id);
+          await this.relay.reportCommandResult(command.id, result);
+        } catch (error) {
+          this.onError(error, command);
+        }
+        continue;
+      }
       if (command.taskId !== this.relayTaskId) continue;
       if (!SHADOW_COMMANDS.has(command.type)) {
         try {

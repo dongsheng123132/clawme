@@ -9,7 +9,7 @@ import {
   type IdentityRole,
 } from "./auth.js";
 import { DeviceError, type DeviceStore } from "./devices.js";
-import type { AttentionRequest, DutyTask, Machine, TaskStatus } from "./v3-types.js";
+import type { AttentionRequest, DutyTask, Machine, MachineApp, TaskStatus } from "./v3-types.js";
 import { V3Store } from "./v3-store.js";
 import { SyncCursorError } from "./sync.js";
 import { shadowActor, ShadowError } from "./shadow.js";
@@ -170,6 +170,38 @@ export function installDeviceRoutes(app: Express, devices: DeviceStore): void {
   });
 }
 
+/**
+ * owner 声明的可启动程序清单。
+ *
+ * 刻意只收 id / name / label / color：没有命令行、没有路径、没有图片。手机拿到的
+ * 是身份和怎么画，不是怎么执行 —— 执行由 owner 从自己的白名单里查。
+ */
+function normalizeApps(value: unknown): MachineApp[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const apps: MachineApp[] = [];
+  for (const item of value.slice(0, 60)) {
+    if (!item || typeof item !== "object") continue;
+    const raw = item as Record<string, unknown>;
+    const id = typeof raw.id === "string" ? raw.id.trim() : "";
+    const name = typeof raw.name === "string" ? raw.name.trim() : "";
+    if (!id || !name || seen.has(id)) continue;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id)) continue;
+    seen.add(id);
+    apps.push({
+      id,
+      name: name.slice(0, 60),
+      ...(typeof raw.label === "string" && raw.label.trim()
+        ? { label: raw.label.trim().slice(0, 3) }
+        : {}),
+      ...(typeof raw.color === "string" && /^#[0-9a-fA-F]{6}$/.test(raw.color.trim())
+        ? { color: raw.color.trim() }
+        : {}),
+    });
+  }
+  return apps;
+}
+
 export function installV3Routes(app: Express, store: V3Store): void {
   app.post("/v3/machines/heartbeat", (req, res) => {
     const identity = authorizedIdentity(req, res, ["owner"]);
@@ -183,6 +215,7 @@ export function installV3Routes(app: Express, store: V3Store): void {
       platform: body.platform ?? "unknown",
       agentVersion: body.agentVersion ?? "unknown",
       capabilities: body.capabilities ?? [],
+      apps: normalizeApps(body.apps),
     });
     res.json({ machine });
   });
@@ -190,6 +223,45 @@ export function installV3Routes(app: Express, store: V3Store): void {
   app.get("/v3/machines", (req, res) => {
     if (!authorizedIdentity(req, res, ["controller"])) return;
     res.json({ machines: store.listMachines() });
+  });
+
+  /**
+   * 在 owner 电脑上启动一个它自己声明过的程序。
+   *
+   * 不走挑战确认：这是低风险、可逆的动作，配对本身就是授权。给每次启动都套一层
+   * 生物识别，用户只会学会盲按确认 —— 那会稀释掉真正需要确认的写动作。
+   */
+  app.post("/v3/machines/:id/apps/:appId/launch", (req, res) => {
+    if (!authorizedIdentity(req, res, ["controller"])) return;
+    try {
+      const command = store.launchApp(
+        req.params.id,
+        req.params.appId,
+        typeof req.headers["idempotency-key"] === "string"
+          ? req.headers["idempotency-key"]
+          : undefined,
+      );
+      res.status(202).json({
+        command_id: command.id,
+        status: command.completedAt ? "completed" : "queued",
+      });
+    } catch (error) {
+      if (shadowFailure(error, res)) return;
+      throw error;
+    }
+  });
+
+  /** 手机点完图标后短暂轮询这里，看 owner 到底开没开起来。 */
+  app.get("/v3/commands/:id", (req, res) => {
+    if (!authorizedIdentity(req, res, ["controller"])) return;
+    const command = store.getCommand(req.params.id);
+    if (!command) return res.status(404).json({ error: "Command not found" });
+    res.json({
+      command_id: command.id,
+      type: command.type,
+      status: command.completedAt ? "completed" : command.acknowledgedAt ? "acknowledged" : "queued",
+      result: command.result ?? null,
+    });
   });
 
   app.post("/v3/tasks", (req, res) => {
