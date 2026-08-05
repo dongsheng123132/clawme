@@ -17,3 +17,6 @@ data/clawme-devices.json
 
 # 本机的可启动程序清单（含真实路径，不进版本库）
 agent/clawme-apps.json
+
+# UURescue 接班包（含本机现场，按需手动分享）
+.uu-rescue/
