@@ -6,6 +6,8 @@ import { RelayClient } from "./relay-client.mjs";
 import { CodexAdapter } from "./codex-adapter.mjs";
 import { ShadowWorker } from "./shadow-worker.mjs";
 import { ActionCliBridge } from "./action-cli-bridge.mjs";
+import { AppLauncher } from "./app-launcher.mjs";
+import { AppHost } from "./app-host.mjs";
 
 function usage() {
   console.log(`
@@ -14,6 +16,7 @@ ClawMe Agent v0.4
 用法:
   npm start -- run "让 Codex 完成的任务"
   npm start -- shadow
+  npm start -- apps                只上报可启动程序并执行手机点下来的启动
 
 环境变量:
   CLAWME_BASE_URL       Relay 地址，例如 https://api.clawme.net
@@ -24,11 +27,12 @@ ClawMe Agent v0.4
   CLAWME_UU_RESCUE_BIN  shadow 模式必填，UURescue 的 bin/uu-rescue.js
   CLAWME_UU_RESCUE_TASK_ID  可选，默认使用当前 UURescue 任务
   CLAWME_RELAY_TASK_ID  可选，覆盖 Relay 内的影核任务 ID
+  CLAWME_APPS           apps 模式的程序清单，默认 ./clawme-apps.json
 `);
 }
 
 const [, , command, ...rest] = process.argv;
-if (!["run", "shadow"].includes(command) || (command === "run" && rest.length === 0)) {
+if (!["run", "shadow", "apps"].includes(command) || (command === "run" && rest.length === 0)) {
   usage();
   process.exit(command ? 1 : 0);
 }
@@ -55,7 +59,27 @@ function relayStatus(ownerState) {
   return "running";
 }
 
-if (command === "shadow") {
+if (command === "apps") {
+  // 最短路径：只上报本机开放的程序，并执行手机点下来的启动。
+  // 不需要 Codex，也不需要 UURescue —— 想让手机上出现几个图标，不该先装一套
+  // AI 工具链。
+  const launcher = await AppLauncher.fromFile(
+    resolve(process.env.CLAWME_APPS || "clawme-apps.json"),
+  );
+  if (launcher.size === 0) {
+    console.error(
+      "没有可启动的程序。复制 clawme-apps.example.json 成 clawme-apps.json 填上你的路径，"
+        + "或用 CLAWME_APPS 指定文件。",
+    );
+    process.exit(1);
+  }
+  const host = new AppHost({ relay, launcher, machineName, platform: platform() });
+  for (const signal of ["SIGINT", "SIGTERM"]) {
+    process.on(signal, () => { host.stop(); process.exit(0); });
+  }
+  console.log(`ClawMe app host: ${machineName} (${machineId}) -> ${baseUrl}`);
+  await host.start();
+} else if (command === "shadow") {
   const cliPath = process.env.CLAWME_UU_RESCUE_BIN;
   if (!cliPath) {
     console.error("shadow 模式缺少 CLAWME_UU_RESCUE_BIN");
